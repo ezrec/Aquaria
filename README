@@ -1,0 +1,14 @@
+Compiling
+---------
+
+If you've checked this out from the repository, you will notice
+that the 'configure' file is missing. Not a problem! Just run:
+
+ $ ./autoconf.sh
+
+That builds the 'configure' file, and all the automake and autoconf
+support files. From there, just run:
+
+ $ ./configure
+ $ make
+ $ sudo make install
