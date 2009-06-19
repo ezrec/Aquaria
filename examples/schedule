@@ -1,45 +1,69 @@
+# Range operators (everything but time) are as follows:
+#   < MAX
+#   > MIN
+#   <= MAX
+#   >= MIN
+#   in MIN to MAX	(MIN < temp && temp < MAX)
+#   from MIN to MAX	(MIN <= temp && temp <= MAX)
+#   = VALUE
+#   != VALUE
+#
+# Time operators are as follows:
+#   at H1:M1 until H2:M2	(H1:M1 <= time && time <= H2:M2)
+#   at H1:M1 for H2:M2		(H1:M1 <= time && time < (H1:M1 + H2:M2))
+#   at H1:M1                    (H1:M1 <= time && time < (H1:M1 + 00:01))
+#   or you can use ranges. The '=' and '!=' operators are not allowed.
+#
+# Weekday operator is as follows:
+#   is <sunday|monday|tuesday|wednesday|thursday|friday>
+#
+#   or you can use ranges.
+#
 # Circulation pump, simulating tide changes every 6 hours
-Device Pump:Circulation
+Device Pump.Circulation
 	On Always
-	Off Time 05:50 for 0:20
-	Off Time 11:50 for 0:20
-	Off Time 17:50 for 0:20
-	Off Time 23:50 for 0:20
+	Off Time at 05:50 for 0:20
+	Off Time at 11:50 for 0:20
+	Off Time at 17:50 for 0:20
+	Off Time at 23:50 for 0:10
+	Off Time at 00:00 for 0:10
 
 # Powerhead - always on
-Device Pump:Powerhead
+Device Pump.Powerhead
 	On Always
-	Off Time 05:50 for 0:20
-	Off Time 11:50 for 0:20
-	Off Time 17:50 for 0:20
-	Off Time 23:50 for 0:20
+	Off Time at 05:50 for 0:20
+	Off Time at 11:50 for 0:20
+	Off Time at 17:50 for 0:20
+	Off Time at 23:50 for 0:10
+	Off Time at 00:00 for 0:10
 
 # Light timing
-Device Light:Dawn
-	On Time 12:00 for 12:00
+Device Light.Dawn
+	On Time at 12:00 for 12:00
 #	Off Always
 
-Device Light:Morning
-	On Time 14:00 for 8:00
+Device Light.Morning
+	On Time at 14:00 for 8:00
 #	Off Always
 
-Device Light:Full
-	On Time 16:00 for 4:00
+Device Light.Full
+	On Time at 16:00 for 4:00
 #	Off Always
 
-Device Light:Refugium
+Device Light.Refugium
 	# Refugium light timing (12 hour cycle)
-	On Time 00:00 for 12:00
+	On Time at 00:00 for 12:00
 	# Refugium light timing (24 hour continuous)
 #	Off Always
 
 
-# Temperature Controls - 80-85F range
+# Temperature Controls
+#
 # NOTE: Tank temp is -6F from refugium temp in winter!
-Device Temp:Hotter
-	On Temp <79F
-	Off Temp >82F
+Device Temp.Hotter
+	On Temp.Refugium < 79F
+	Off Temp.Refugium > 82F
 
-Device Temp:Cooler
-	On Temp >85F
-	Off Temp <83F
+Device Temp.Cooler
+	On Temp.Refugium > 85F
+	Off Temp.Refugium < 83F

@@ -1,8 +1,72 @@
-1,Light:Dawn
-2,Light:Morning
-3,Light:Full
-4,Light:Refugium
-5,Pump:Circulation
-6,Pump:Sump
-7,Temp:Cooler
-8,Temp:Hotter
+# Sensor configuration
+# Executes <prefix>/lib/aquaria/sensor/<device>
+#
+# sensor <name> <type> <device> <options...>
+#
+# Type can be one of:
+#    temp	- Micro degrees kelvin
+#    ph		- Micro units of pH.
+#    flow	- Flow in cubic cm/sec
+#    ppb	- Parts per billion
+#    ratio	- Ratio
+#
+# Sensor device program arguments are passed as follows:
+#
+# <program> <options...>
+#
+# The sensor device program should return a 64 bit number,
+# as per the above table.
+#
+# Example
+# -------
+#
+# sensor Probe1 temp gotemp --device=3
+#
+# the Aquaria daemon will execute:
+#
+# <prefix>/lib/aquaria/sensor/gotemp --device 3
+#
+# and if, for example, the temperate was 75F
+# (aka 23.88888C or 297.0388888K), then gotemp
+# should print out:
+#  297038888
+# or
+#  0x11b47428
+# (either is acceptable)
+#
+# If the sensor program's exit status if not 0, its
+# output is ignored, and its stderr output is copied
+# to the aquaria syslog.
+
+sensor Temp.Refugium temp gotemp  --device=0
+sensor Temp.Aquarium temp temper1 --device=0
+sensor Temp.Sump     temp temper1 --device=1
+
+# Switchable Device configuration
+# Executes <prefix>/lib/aquaria/device/<device>
+#
+# device <name> <device> [options...]
+#
+# Device program arguments are passed as follows:
+#
+#  <program> --state=[on|off] [options...]
+#
+# For the --state command, the device program should
+# switch the target device to the specified mode.
+#
+# If the device program exits with a non-zero exit code,
+# the program's stderr output is sent to the aquaria log.
+#
+
+device Alarm.Temp.Hot  sound /usr/lib/aquaria/sound/too_hot.wav
+device Alarm.Temp.Cold  sound /usr/lib/aquaria/sound/too_cold.wav
+device Emergency.Temp.Hot emergency_chiller
+
+device Light.Dawn       lpcswitch --ip=192.168.0.100 --switch=1
+device Light.Morning    lpcswitch --ip=192.168.0.100 --switch=2
+device Light.Full       lpcswitch --ip=192.168.0.100 --switch=3
+device Light.Refugium   lpcswitch --ip=192.168.0.100 --switch=4
+device Pump.Circulation lpcswitch --ip=192.168.0.100 --switch=5
+device Pump.Powerhead   lpcswitch --ip=192.168.0.100 --switch=6
+device Temp.Cooler      lpcswitch --ip=192.168.0.100 --switch=7
+device Temp.Hotter      lpcswitch --ip=192.168.0.100 --switch=8
