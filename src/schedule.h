@@ -46,7 +46,7 @@ struct aq_sensor;
 
 /* Schedule memory management
  */
-struct aq_sched *aq_sched_alloc(void);
+struct aq_sched *aq_sched_alloc(const char *log);
 void aq_sched_free(struct aq_sched *sched);
 
 /* Read the configuration file

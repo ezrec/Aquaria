@@ -60,13 +60,13 @@ sensor Temp.Sump     temp temper1 --device=1
 
 device Alarm.Temp.Hot  sound /usr/lib/aquaria/sound/too_hot.wav
 device Alarm.Temp.Cold  sound /usr/lib/aquaria/sound/too_cold.wav
-device Emergency.Temp.Hot emergency_chiller
+device Emergency.Temp.Colder emergency_chiller
 
-device Light.Dawn       lpcswitch --ip=192.168.0.100 --switch=1
-device Light.Morning    lpcswitch --ip=192.168.0.100 --switch=2
-device Light.Full       lpcswitch --ip=192.168.0.100 --switch=3
-device Light.Refugium   lpcswitch --ip=192.168.0.100 --switch=4
-device Pump.Circulation lpcswitch --ip=192.168.0.100 --switch=5
-device Pump.Powerhead   lpcswitch --ip=192.168.0.100 --switch=6
-device Temp.Cooler      lpcswitch --ip=192.168.0.100 --switch=7
-device Temp.Hotter      lpcswitch --ip=192.168.0.100 --switch=8
+device Light.Dawn       lpcswitch --ip=192.168.0.100 --switch=1	--name=Dawn
+device Light.Morning    lpcswitch --ip=192.168.0.100 --switch=2 --name=Morning
+device Light.Full       lpcswitch --ip=192.168.0.100 --switch=3 --name=Full
+device Light.Refugium   lpcswitch --ip=192.168.0.100 --switch=4 --name=refugium
+device Pump.Circulation lpcswitch --ip=192.168.0.100 --switch=5 --name=Circulation
+device Pump.Powerhead   lpcswitch --ip=192.168.0.100 --switch=6 --name=Powerhead
+device Temp.Cooler      lpcswitch --ip=192.168.0.100 --switch=7 --name=Cooler
+device Temp.Hotter      lpcswitch --ip=192.168.0.100 --switch=8 --name=Hotter

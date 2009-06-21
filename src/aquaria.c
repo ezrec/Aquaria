@@ -335,7 +335,7 @@ int main(int argc, char **argv)
 	if (err < 0) {
 		exit(EXIT_FAILURE);
 	}
-	sched = aq_sched_alloc();
+	sched = aq_sched_alloc("aquaria.vcd");
 	aq_sched_config(sched, "config");
 	aq_sched_read(sched, "schedule");
 

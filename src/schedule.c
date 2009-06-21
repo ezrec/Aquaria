@@ -35,10 +35,13 @@
 #include <sys/time.h>
 
 #include "schedule.h"
+#include "log.h"
 
 struct aq_sched {
+	struct log *log;
 	struct aq_sensor {
 		struct aq_sensor *next;
+		void *log_id;
 		char *name;
 		enum aq_sensor_type type;
 		uint64_t reading;
@@ -48,6 +51,7 @@ struct aq_sched {
 	} *sensors;
 	struct aq_device {
 		struct aq_device *next;
+		void *log_id;
 		char *name;
 		int (*set_state)(void *priv, int is_on);
 		void *priv;
@@ -137,9 +141,17 @@ static int aq_sched_sensor(struct aq_sched *sched, const char *name,
 	sen->type = type;
 	sen->get_reading = get_reading;
 	sen->priv = get_reading_priv;
+	if (type == AQ_SENSOR_NOP ||
+	    type == AQ_SENSOR_TIME ||
+	    type == AQ_SENSOR_WEEKDAY) {
+		sen->log_id = NULL;
+	} else {
+		sen->log_id = log_register_sensor(sched->log, name, type);
+	}
 
 	sen->next = sched->sensors;
 	sched->sensors = sen;
+
 
 	return 0;
 }
@@ -160,8 +172,10 @@ static int aq_sched_device(struct aq_sched *sched, const char *name,
 
 	dev = malloc(sizeof(*dev));
 	dev->name = strdup(name);
+	dev->state = AQ_STATE_UNCHANGED;
 	dev->set_state = set_state;
 	dev->priv = set_state_priv;
+	dev->log_id = log_register_device(sched->log, name);
 
 	dev->next = sched->devices;
 	sched->devices = dev;
@@ -171,11 +185,16 @@ static int aq_sched_device(struct aq_sched *sched, const char *name,
 
 /* Schedule memory management
  */
-struct aq_sched *aq_sched_alloc(void)
+struct aq_sched *aq_sched_alloc(const char *log)
 {
 	struct aq_sched *sched;
 
 	sched = calloc(1, sizeof(*sched));
+	sched->log = log_open(log);
+	if (sched->log == NULL) {
+		free(sched);
+		return NULL;
+	}
 
 	/* Predefined sensors */
 	aq_sched_sensor(sched, "Always",  AQ_SENSOR_NOP,     get_reading_always, NULL);
@@ -373,6 +392,9 @@ static uint64_t aq_sensor_exec(void *priv)
 			break;
 		}
 	}
+
+	close(pfd_stdout[0]);
+	close(pfd_stderr[0]);
 
 	if (ecp != &ebuff[0]) {
 		*ecp = 0;
@@ -1071,22 +1093,31 @@ void aq_sched_eval(struct aq_sched *sched)
 	enum aq_state state;
 
 	gettimeofday(&reading_time.now, NULL);
+reading_time.now.tv_sec *= 1000;
 	localtime_r(&reading_time.now.tv_sec, &reading_time.localnow);
 
-	/* Update all the readings
+	/* Update and log all the readings
 	 */
+	log_start(sched->log, &reading_time.now);
 	for (sen = sched->sensors; sen != NULL; sen = sen->next) {
 		sen->reading = sen->get_reading(sen->priv);
+		if (sen->log_id != NULL)
+			log_sensor(sched->log, sen->log_id, sen->reading);
 	}
 
 	for (dev = sched->devices; dev != NULL; dev = dev->next) {
 		state = aq_device_eval(dev);
 		if (state != AQ_STATE_UNCHANGED &&
 		    dev->state != state) {
-			dev->set_state(dev->priv, (state == AQ_STATE_ON) ? 1 : 0);
+			int is_on = (state == AQ_STATE_ON) ? 1 : 0;
+
+			dev->set_state(dev->priv, is_on);
 			dev->state = state;
+			if (dev->log_id != NULL)
+				log_device(sched->log, dev->log_id, is_on);
 		}
 	}
+	log_pause(sched->log);
 }
 
 /* Get the first device

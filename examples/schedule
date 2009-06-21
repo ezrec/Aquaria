@@ -39,22 +39,22 @@ Device Pump.Powerhead
 
 # Light timing
 Device Light.Dawn
+	Off Always
 	On Time at 12:00 for 12:00
-#	Off Always
 
 Device Light.Morning
+	Off Always
 	On Time at 14:00 for 8:00
-#	Off Always
 
 Device Light.Full
+	Off Always
 	On Time at 16:00 for 4:00
-#	Off Always
 
 Device Light.Refugium
+	Off Always
 	# Refugium light timing (12 hour cycle)
 	On Time at 00:00 for 12:00
 	# Refugium light timing (24 hour continuous)
-#	Off Always
 
 
 # Temperature Controls
@@ -67,3 +67,15 @@ Device Temp.Hotter
 Device Temp.Cooler
 	On Temp.Refugium > 85F
 	Off Temp.Refugium < 83F
+
+Device Alarm.Temp.Hot
+	On Always	# So we get a test sound when we start
+	Off Temp.Aquarium < 88F
+
+Device Alarm.Temp.Cold
+	On Always	# So we get a test sound when we start
+	Off Temp.Aquarium > 75F
+
+Device Emergency.Temp.Colder
+	Off Always
+	On Temp.Aquarium > 88F
