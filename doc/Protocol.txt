@@ -1,0 +1,69 @@
+
+Text based, \n separated lines
+
+Since \n terminates results list
+-->
+	sensor time
+<--
+	0 Ok
+	reading 1249004661212000000
+	units ns
+
+-->
+	sensors
+<--
+	0 Ok
+	refugium.temp
+	sump.temp
+	sump.level.overflow
+	sump.level.not-empty
+	display.temp
+
+-->
+	sensor foo.xyyz
+<--
+	1 No such sensor
+
+-->
+	sensor sump.temp
+<--
+	0 Ok
+	type temp
+	reading 28000000
+	units uK
+
+-->
+	sensor sump.level.overflow
+<--
+	0 Ok
+	type switch
+	reading off
+
+-->
+	devices
+<--
+	0 Ok
+	refugium.pump
+	refugium.light
+
+-->
+	device refugium.pump
+<--
+	0 Ok
+	type switch
+	setting off
+
+-->
+	override refugium.pump on 100 s
+<--
+	0 Ok
+
+-->
+	device refugium.pump
+<--
+	0 Ok
+	type switch
+	setting off
+	override.setting on
+	override.until 1249004761212000000
+	override.units ns
