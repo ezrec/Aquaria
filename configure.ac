@@ -3,7 +3,8 @@
 
 AC_PREREQ([2.63])
 AC_INIT([Aquaria], [0.2], [jason.mcmullan@gmail.com])
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([foreign subdir-objects])
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -27,5 +28,4 @@ AC_CHECK_FUNCS([localtime_r strchr])
 
 AC_OUTPUT([
 	Makefile
-	src/Makefile
 ])
