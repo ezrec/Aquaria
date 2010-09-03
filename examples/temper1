@@ -1,0 +1,4 @@
+#!/bin/sh
+echo "$0" "$@" 1>&2
+DATE=`date +%S --date="now + 5 sec"`
+echo `expr 273 + $DATE`000000

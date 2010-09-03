@@ -1,0 +1,20 @@
+#!/bin/sh
+
+CMD=
+
+echo $0 "$@" 1>&2
+while [ -n "$1" ]; do
+	case "$1" in
+	--state=on) CMD=aplay ;;
+	--state=off) CMD=;;
+	*) PLAYLIST=`basename $1` ;;
+	esac
+	shift;
+done
+
+if [ -z "$CMD" ]; then
+	kill `cat /tmp/sound.$PLAYLIST`
+else
+	(while true; do $CMD $PLAYLIST; sleep 1; done) &
+	echo $! >/tmp/sound.$PLAYLIST
+fi
