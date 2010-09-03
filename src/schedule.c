@@ -264,7 +264,7 @@ struct aq_device *aq_device_find(struct aq_sched *sched, const char *name)
 	return dev;
 }
 
-static const char *aq_sensor_typename(enum aq_sensor_type type)
+const char *aq_sensor_typename(enum aq_sensor_type type)
 {
 	const char *c;
 
@@ -282,7 +282,26 @@ static const char *aq_sensor_typename(enum aq_sensor_type type)
 	return c;
 }
 
-static enum aq_sensor_type aq_sensor_nametype(const char *name)
+const char *aq_sensor_typeunits(enum aq_sensor_type type)
+{
+	const char *c;
+
+	c = "unknown";
+	switch (type) {
+	case AQ_SENSOR_NOP: c = "no-op"; break;
+	case AQ_SENSOR_WEEKDAY: c = "weekday"; break;	// 0 - 6
+	case AQ_SENSOR_TIME: c = "us"; break;	// microseconds
+	case AQ_SENSOR_TEMP: c = "uK"; break;	// microkelvin
+	default:
+		/* TODO: Other sensor types */
+		break;
+	}
+
+	return c;
+}
+
+
+enum aq_sensor_type aq_sensor_nametype(const char *name)
 {
 	enum aq_sensor_type type = AQ_SENSOR_INVALID;
 

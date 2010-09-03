@@ -106,5 +106,13 @@ struct aq_sensor *aq_sensor_find(struct aq_sched *sched, const char *name);
 enum aq_sensor_type aq_sensor_type(struct aq_sensor *sen);
 uint64_t aq_sensor_reading(struct aq_sensor *sen);
 
+/* Type to name mappings
+ */
+enum aq_sensor_type aq_sensor_nametype(const char *name);
+
+const char *aq_sensor_typename(enum aq_sensor_type type);
+
+/* Type to units mappings */
+const char *aq_sensor_typeunits(enum aq_sensor_type type);
 
 #endif /* SCHEDULE_H */
