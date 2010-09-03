@@ -24,12 +24,8 @@ src_aquaria_SOURCES = \
 	src/aquaria.c \
 	src/schedule.h \
 	src/schedule.c \
-	src/ui.h \
-	src/ui.c \
-	src/ui-tty.c \
 	src/log.h \
 	src/log.c
 
 src_aquaria_LDADD = $(src_libui_ip_usbph_la_LIBADD) \
-		    $(JSON_LIBS) \
-		    -ldl
+		    $(JSON_LIBS)
