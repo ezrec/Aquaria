@@ -1,69 +1,110 @@
-
-Text based, \n separated lines
-
-Since \n terminates results list
--->
-	sensor time
-<--
-	0 Ok
-	reading 1249004661212000000
-	units ns
+JSON objects, '-->' is data from client, '<--' is data to client
+Default is port 4444, on localhost
 
 -->
-	sensors
+	{ "request":"get-sensor" }
 <--
-	0 Ok
-	refugium.temp
-	sump.temp
-	sump.level.overflow
-	sump.level.not-empty
-	display.temp
+	{ "sensor": [
+		{ "name":"time" },
+		{ "name":"refugium.temp" },
+		{ "name":"sump.temp" },
+		{ "name":"sump.level.overflow" },
+		{ "name":"sump.level.not-empty" },
+		{ "name":"display.temp" }
+		]
+	}
+-->
+	{ "request":"get-sensor",
+	  "name":"time"
+	}
+<--
+	{ "sensor": [
+		{ "name":"time",
+		  "type":"time",
+		  "reading": { "value":1249004661212000000, "units":"ns" }
+		}
+	}
+-->
+	{ "request":"get-sensor",
+	  "name":"time"
+	}
+<--
+	{ "sensor": [] }
+-->
+	{ "request":"get-sensor",
+	  "name":"sump.temp"
+	}
+<--
+	{ "sensor": [
+		{ "name":"sump.temp"
+		  "type":"temp",
+		  "reading": { "value":28000000, "units":"uK" }
+	}
+-->
+	{ "request":"get-sensor",
+	  "name":"sump.level.overflow"
+	}
+<--
+	{ "sensor": [
+		{ "name":"sump.level.overflow",
+		  "type":"switch",
+		  "reading": { "value":0, "units":"switch" }
+	}
+-->
+	{ "request":"get-device" }
+<--
+	{ "device": [
+		{ "name":"refugium.pump" },
+		{ "name":"refugium.light" }
+	  ]
+	}
 
 -->
-	sensor foo.xyyz
+	{ "request":"get-device",
+	  "name":"refugium.pump"
+	}
 <--
-	1 No such sensor
-
+	{ "device": [
+		{ "name":"refugium.pump",
+		  "active":false
+		  "reason":
+			{ "input":"sensor",
+			  "name":"refugium.temp",
+			  "operator":"<",
+			  "threshold": { "value":85, "units":"F" }
+			}
+		}
+	}
 -->
-	sensor sump.temp
+	{ "request":"set-device",
+	  "name":"refugium.pump",
+	  "active":true
+	  "timeout": { "value":100, "units":"s" }
+	}
 <--
-	0 Ok
-	type temp
-	reading 28000000
-	units uK
-
+	{ "device": [
+		{ "name":"refugium.pump",
+		  "active":true
+		  "reason":
+			{ "input":"set",
+			  "active":true,
+			  "expires": { "value":3273823100, "units":"s" }
+			}
+		}
+	}
 -->
-	sensor sump.level.overflow
+	{ "request":"unset-device",
+	  "name":"refugium.pump",
+	}
 <--
-	0 Ok
-	type switch
-	reading off
-
--->
-	devices
-<--
-	0 Ok
-	refugium.pump
-	refugium.light
-
--->
-	device refugium.pump
-<--
-	0 Ok
-	type switch
-	setting off
-
--->
-	override refugium.pump on 100 s
-<--
-	0 Ok
-
--->
-	device refugium.pump
-<--
-	0 Ok
-	type switch
-	setting off
-	override.setting on
-	override.until 1249004761212000000
-	override.units ns
+	{ "device": [
+		{ "name":"refugium.pump",
+		  "active":false,
+		  "reason":
+			{ "input":"sensor",
+			  "name":"refugium.temp",
+			  "operator":"<",
+			  "threshold": { "value":85, "units":"F" }
+			}
+		}
+	}
