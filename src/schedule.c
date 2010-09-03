@@ -136,7 +136,7 @@ static int aq_sched_sensor(struct aq_sched *sched, const char *name,
 		return -EBUSY;
 	}
 
-	sen = malloc(sizeof(*sen));
+	sen = calloc(1, sizeof(*sen));
 	sen->name = strdup(name);
 	sen->type = type;
 	sen->get_reading = get_reading;
@@ -170,7 +170,7 @@ static int aq_sched_device(struct aq_sched *sched, const char *name,
 		return -EBUSY;
 	}
 
-	dev = malloc(sizeof(*dev));
+	dev = calloc(1, sizeof(*dev));
 	dev->name = strdup(name);
 	dev->state = AQ_STATE_UNCHANGED;
 	dev->set_state = set_state;
@@ -1093,7 +1093,6 @@ void aq_sched_eval(struct aq_sched *sched)
 	enum aq_state state;
 
 	gettimeofday(&reading_time.now, NULL);
-reading_time.now.tv_sec *= 1000;
 	localtime_r(&reading_time.now.tv_sec, &reading_time.localnow);
 
 	/* Update and log all the readings
