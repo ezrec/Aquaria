@@ -15,7 +15,7 @@ AC_PROG_LIBTOOL
 # Checks for libraries.
 AC_CHECK_LIB([usb], [usb_init])
 PKG_CHECK_MODULES([JSON], [libjson])
-PKG_CHECK_MODULES([IPUSBPH],[libip-usbph])
+PKG_CHECK_MODULES([IP_USBPH],[libip-usbph])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h stdlib.h string.h strings.h syslog.h unistd.h ip-usbph.h])

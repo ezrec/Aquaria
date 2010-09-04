@@ -96,7 +96,6 @@ static void tty_timestamp(void *ui)
 	struct tm local_now;
 	time_t time_now;
 	char buff[256];
-	int i;
 	const char *day_of_week[7] = {
 		"Sat", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
 	};
@@ -132,7 +131,6 @@ static void tty_show_sensor(void *ui, const char *title, struct aq_sensor *sen)
 	uint64_t reading;
 	double f;
 	char buff[10];
-	int i;
 
 	ui_show_title(ui, title);
 

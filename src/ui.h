@@ -23,7 +23,29 @@
 #include <stdarg.h>
 
 #include "aquaria.h"
-#include "schedule.h"
+
+/* Aquaria UI keys defines */
+typedef enum {
+	AQ_KEY_ERROR = -1,
+	AQ_KEY_NOP = 0,
+	AQ_KEY_0,		/* Numeric keypad */
+	AQ_KEY_1,
+	AQ_KEY_2,
+	AQ_KEY_3,
+	AQ_KEY_4,
+	AQ_KEY_5,
+	AQ_KEY_6,
+	AQ_KEY_7,
+	AQ_KEY_8,
+	AQ_KEY_9,
+	AQ_KEY_PERIOD,	/* . */
+	AQ_KEY_UP,
+	AQ_KEY_DOWN,
+	AQ_KEY_LEFT,
+	AQ_KEY_RIGHT,
+	AQ_KEY_SELECT,	/* YES, ENTER, etc */
+	AQ_KEY_CANCEL,	/* NO, ESC, etc */
+} aq_key;
 
 void *ui_create(const char *name, int argc, char **argv);
 

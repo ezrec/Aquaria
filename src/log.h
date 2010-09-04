@@ -23,7 +23,7 @@
 
 #include <sys/time.h>
 
-#include "schedule.h"
+#include "aquaria.h"
 
 struct log;
 

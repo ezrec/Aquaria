@@ -18,9 +18,6 @@
  *
  */
 
-#ifndef LOG_H
-#define LOG_H
-
 #define _GNU_SOURCE
 #include <assert.h>
 #include <stdio.h>
@@ -30,7 +27,7 @@
 #include <search.h>
 #include <sys/time.h>
 
-#include "schedule.h"
+#include "aquaria.h"
 #include "log.h"
 
 struct log {
@@ -128,6 +125,7 @@ int log_start(struct log *log, struct timeval *tv)
 	}
 
 	fprintf(log->file, "#%u%06u\n", (unsigned int)tv->tv_sec, (unsigned int)tv->tv_usec * 1000);
+	return 0;
 }
 
 /* Mark a sensor reading
@@ -137,6 +135,7 @@ int log_sensor(struct log *log, void *id, uint64_t reading)
 	ENTRY *ent = id;
 
 	fprintf(log->file, "r%.16g %s\n", (double)reading, (const char *)ent->data);
+	return 0;
 }
 
 /* Mark a device state change
@@ -146,6 +145,7 @@ int log_device(struct log *log, void *id, int is_on)
 	ENTRY *ent = id;
 
 	fprintf(log->file, "b%d %s\n", is_on ? 1 : 0, (const char *)ent->data);
+	return 0;
 }
 
 /* End the log entry
@@ -153,6 +153,5 @@ int log_device(struct log *log, void *id, int is_on)
 int log_pause(struct log *log)
 {
 	fflush(log->file);
+	return 0;
 }
-
-#endif /* LOG_H */

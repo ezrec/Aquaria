@@ -25,7 +25,6 @@
 static void *ipusbph_open(int argc, char **argv)
 {
 	struct ip_usbph *ph;
-	int err;
 
 	ph = ip_usbph_acquire(0);
 	if (ph == NULL) {
@@ -130,7 +129,7 @@ static void ipusbph_timestamp(void *ui)
 	localtime_r(&time_now, &local_now);
 
 	snprintf(buff, sizeof(buff), "%2d%2d%2d%02d",
-	         local_now.tm_mon, local_now.tm_mday,
+	         local_now.tm_mon + 1, local_now.tm_mday,
 	         local_now.tm_hour, local_now.tm_min);
 
 	for (i = 0; buff[i] != 0; i++) {

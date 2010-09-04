@@ -146,7 +146,6 @@ static void curses_debug(void *ui, const char *fmt, va_list va)
 
 }
 
-
 static void curses_show_title(void *ui, const char *title)
 {
 	WINDOW *win = ui;
@@ -176,7 +175,7 @@ static void curses_show_sensor(void *ui, const char *title, struct aq_sensor *se
 		/* Convert from microkelvin to F */
 		f = ((reading / 1000000.0) - 273.15) * 9.0 / 5.0 + 32;
 
-		sprintf(buff, "%.1g", f);
+		sprintf(buff, "%.1f F", f);
 		break;
 	default:
 		break;	/* TODO: Other sensor types */
