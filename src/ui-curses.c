@@ -200,9 +200,9 @@ static void curses_show_device(void *ui, const char *title, struct aq_device *de
 	is_on = aq_device_get(dev, &override);
 	wmove(win, 5, 0);
 	if (is_on) {
-		waddch(win, '+');
+		waddch(win, '1');
 	} else {
-		waddch(win, '-');
+		waddch(win, '0');
 	}
 
 	now = time(NULL);
