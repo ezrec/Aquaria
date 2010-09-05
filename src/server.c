@@ -46,6 +46,8 @@ static void usage(const char *program)
 			"\n"
 			"Options:\n"
 			"  -d DIR, --datadir DIR       location of Aquaria data\n"
+			"  -v FILE, --vcdlog FILE      VCD log (for use with gtkwave)\n"
+			"  -p PORT, --port NUM         port to listen at\n"
 			"\n"
 			"Commands:\n"
 			"  -h, -?, --help              this help message\n"
@@ -122,7 +124,7 @@ int main(int argc, char **argv)
 	}
 	aq = aq_create(vcdlog);
 	aq_config_read(aq, "config");
-	aq_sched_read(aq, "aqule");
+	aq_sched_read(aq, "schedule");
 
 	sock = aq_server_open(port);
 	if (sock < 0) {
