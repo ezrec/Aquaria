@@ -1024,7 +1024,7 @@ static int aq_cond_nop(struct aq_condition *cond, char **s)
 static int aq_sensor_unitize(enum aq_sensor_type type, uint64_t *pval, const char *tok)
 {
 	double d_val,s;
-	long int h,m;
+	int h,m;
 	char *rest;
 
 	switch (type) {
@@ -1054,7 +1054,7 @@ static int aq_sensor_unitize(enum aq_sensor_type type, uint64_t *pval, const cha
 		if (h < 0 || h >= 24) {
 			return -1;
 		}
-		*pval = (h * 3600) * 1000000;
+		*pval = (h * 3600ULL) * 1000000ULL;
 		if (*rest == 0) {
 			break;
 		}
@@ -1265,7 +1265,7 @@ static int aq_cond_range(struct aq_condition *cond, char **s)
 			}
 			cond->range.len = val2 - val1;
 		} else {
-			if (val1 + val2 > (24 * 3600 * 1000000ULL)) {
+			if ((val1 + val2) > (24 * 3600 * 1000000ULL)) {
 				return -1;
 			}
 			cond->range.len = val2;
