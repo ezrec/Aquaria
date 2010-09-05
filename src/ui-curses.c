@@ -1,6 +1,6 @@
 /*
  * Aquarium Power Manager
- * IP-USBPH user interface
+ * ncurses user interface
  *
  * Copyright 2009, Jason S. McMullan <jason.mcmullan@gmail.com>
  *

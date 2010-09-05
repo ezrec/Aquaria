@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <signal.h>
 #include <inttypes.h>
 
 #include <sys/poll.h>
@@ -112,6 +113,9 @@ int main(int argc, char **argv)
 	openlog("aquaria", LOG_CONS | LOG_PERROR, LOG_USER);
 	on_exit(log_exit_reason, NULL);
 
+	/* Ignore SIGPIPE errors */
+	signal(SIGPIPE, SIG_IGN);
+
 	err = chdir(datadir);
 	if (err < 0) {
 		exit(EXIT_FAILURE);
@@ -170,8 +174,8 @@ int main(int argc, char **argv)
 				/* Socket died. */
 				aq_server_disconnect(conn[i]);
 				close(fd[i].fd);
-				memcpy(&conn[i], &conn[i+1], fds - i - 1);
-				memcpy(&fd[i], &fd[i+1], fds - i - 1);
+				memmove(&conn[i], &conn[i+1], sizeof(*conn) * (fds - i - 1));
+				memmove(&fd[i], &fd[i+1], sizeof(*fd) * (fds - i - 1));
 				fds--;
 			}
 		}

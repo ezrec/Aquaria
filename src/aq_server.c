@@ -168,7 +168,7 @@ static int aq_server_wr_device(json_printer *print, struct aq_device *dev)
 
 		/* reason.expires.value */
 		json_print_pretty(print, JSON_KEY, "value", 5);
-		snprintf(buff, sizeof(buff), "%" PRIu64, (override - now) * 1000000UL);
+		snprintf(buff, sizeof(buff), "%" PRIu64, (override - now) * 1000000ULL);
 		buff[sizeof(buff)-1] = 0;
 		len = strlen(buff);
 		json_print_pretty(print, JSON_INT, buff, len);
@@ -257,7 +257,6 @@ static int rd_json(void *userdata, int type, const char *data, uint32_t len)
 	char *cp;
 	int err = 0;
 
-fprintf(stderr, "conn: %d, type=%d, data=\"%s\"\n", conn->sock, type, data);
 	/* If we're in a bad state, anything else from this connection */
 	if (conn->json.depth < 0)
 		return -EINVAL;
@@ -449,7 +448,6 @@ int aq_server_handle(struct aq_server_conn *conn)
 
 	len = read(conn->sock, &buff[0], sizeof(buff));
 	if (len == 0) {
-		fprintf(stderr, "conn: %d EOF\n", conn->sock);
 		return -1;	/* EOF */
 	}
 
@@ -459,7 +457,8 @@ int aq_server_handle(struct aq_server_conn *conn)
 	/* The JSON parser will call callbacks if need be.
 	 */
 	err = json_parser_string(&conn->parser, buff, len, NULL);
-	assert(err >= 0);
+	if (err)
+		return -EINVAL;
 
 	return 0;
 }

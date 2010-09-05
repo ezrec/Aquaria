@@ -68,7 +68,7 @@ void aq_sched_eval(struct aquaria *aq);
 /* Refresh sensor and device states (for client connections,
  * unneeded on server)
  */
-int aq_sync(struct aquaria *aq);
+int aq_sync(struct aquaria *aq, const char *request);
 
 /* Get the first device
  */

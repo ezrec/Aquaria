@@ -305,7 +305,7 @@ int ui_mainloop(struct aquaria *aq, void *ui)
 		aq_key key;
 
 		key = ui_keywait(ui, 1000);	/* Wait up to 1 second */
-		aq_sync(aq);
+		aq_sync(aq, NULL);
 		if (key > AQ_KEY_NOP) {
 			handle_key(menu_path, key);
 		}

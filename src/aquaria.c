@@ -379,9 +379,79 @@ static int rd_json_sensor(struct aquaria *aq, int type, const char *data, uint32
 
 static int rd_json_device(struct aquaria *aq, int type, const char *data, uint32_t len)
 {
-	int err;
+	int err = 0;
 
-	err = -EINVAL;
+	switch (type) {
+	case JSON_ARRAY_BEGIN:
+		aq->client.depth++;
+		if (aq->client.depth != 2)
+			err = -EINVAL;
+		break;
+	case JSON_ARRAY_END:
+		aq->client.depth--;
+		if (aq->client.depth != 1)
+			err = -EINVAL;
+		aq->client.state = AQ_JSTATE_NONE;
+		aq->client.json_handler = NULL;
+		break;
+	case JSON_OBJECT_BEGIN:
+		aq->client.depth++;
+		if (aq->client.depth != 3) {
+			err = -EINVAL;
+			break;
+		}
+		memset(&aq->client.tmp.device, 0, sizeof(aq->client.tmp.device));
+		aq->client.state = AQ_JSTATE_NONE;
+		break;
+	case JSON_OBJECT_END:
+		aq->client.depth--;
+		aq->client.state = AQ_JSTATE_NONE;
+		if (aq->client.depth == 0) {
+			/* End of request */
+		} else if (aq->client.depth == 2 && aq->client.tmp.device.name != NULL) {
+			struct aq_device *dev;
+
+			HASH_FIND_STR(aq->devices, aq->client.tmp.device.name, dev);
+			if (dev == NULL) {
+				dev = malloc(sizeof(*dev));
+				*dev = aq->client.tmp.device;
+				HASH_ADD_KEYPTR(hh, aq->devices, dev->name, strlen(dev->name), dev);
+			} else {
+				dev->state = aq->client.tmp.device.state;
+			}
+		} else {
+			err = -EINVAL;
+		}
+		break;
+	case JSON_KEY:
+		if (strcmp(data, "name") == 0) {
+			aq->client.state = AQ_JSTATE_NAME;
+		} else if (strcmp(data, "active") == 0) {
+			aq->client.state = AQ_JSTATE_ACTIVE;
+		} else {
+			err = -EINVAL;
+		}
+		break;
+	case JSON_STRING:
+		if (aq->client.state == AQ_JSTATE_NAME) {
+			if (aq->client.tmp.device.name != NULL)
+				free(aq->client.tmp.device.name);
+			aq->client.tmp.device.name = strdup(data);
+		} else {
+			err = -EINVAL;
+		}
+		break;
+	case JSON_TRUE:
+	case JSON_FALSE:
+		if (aq->client.state == AQ_JSTATE_ACTIVE) {
+			aq->client.tmp.device.state = (type == JSON_TRUE) ? AQ_STATE_ON : AQ_STATE_OFF;
+		} else {
+			err = -EINVAL;
+		}
+		break;
+	default:
+		err = -EINVAL;
+	}
 
 	return err;
 }
@@ -437,10 +507,21 @@ static int wr_json(void *userdata, const char *s, uint32_t len)
 	return 0;
 }
 
-int aq_sync(struct aquaria *aq)
+int aq_sync(struct aquaria *aq, const char *request)
 {
 	json_printer *print;
 	int err;
+
+	if (request == NULL) {
+		err = aq_sync(aq,  "get-sensor");
+		if (err < 0)
+			return err;
+		err = aq_sync(aq,  "get-device");
+		if (err < 0)
+			return err;
+
+		return 0;
+	}
 
 	if (aq->client.socklen == 0)
 		return 0;
@@ -474,19 +555,11 @@ int aq_sync(struct aquaria *aq)
 
 	print = &aq->client.print;
 
-	/* Request and parse sensors */
+	/* Request and parse */
 	json_print_pretty(print, JSON_OBJECT_BEGIN, NULL, 0);
 	json_print_pretty(print, JSON_KEY, "request", 7);
-	json_print_pretty(print, JSON_STRING, "get-sensor", 10);
+	json_print_pretty(print, JSON_STRING, request, 10);
 	json_print_pretty(print, JSON_OBJECT_END, NULL, 0);
-
-#if 0
-	/* Request and parse devices */
-	json_print_pretty(print, JSON_OBJECT_BEGIN, NULL, 0);
-	json_print_pretty(print, JSON_KEY, "request", 7);
-	json_print_pretty(print, JSON_STRING, "get-device", 10);
-	json_print_pretty(print, JSON_OBJECT_END, NULL, 0);
-#endif
 
 	/* Read till we can't read no more */
 	aq->client.depth = 0;
@@ -519,7 +592,7 @@ struct aquaria *aq_connect(const struct sockaddr *sin, socklen_t len)
 	aq->client.sockaddr = *sin;
 	aq->client.socklen = len;
 
-	err = aq_sync(aq);
+	err = aq_sync(aq, NULL);
 	if (err < 0) {
 		aq_free(aq);
 		return NULL;
