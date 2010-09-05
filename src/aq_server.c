@@ -145,9 +145,11 @@ static int aq_server_wr_device(json_printer *print, struct aq_device *dev)
 	json_print_pretty(print, JSON_STRING, cp, len);
 
 	/* active */
-	json_print_pretty(print, JSON_KEY, "active", 6);
 	active = aq_device_get(dev, &override);
-	json_print_pretty(print, active ? JSON_TRUE : JSON_FALSE, NULL, 0);
+	if (active >= 0) {
+		json_print_pretty(print, JSON_KEY, "active", 6);
+		json_print_pretty(print, active ? JSON_TRUE : JSON_FALSE, NULL, 0);
+	}
 
 	if (now < override) {
 		/* reason */
