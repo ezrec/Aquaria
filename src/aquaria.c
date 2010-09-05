@@ -401,6 +401,7 @@ static int rd_json_device(struct aquaria *aq, int type, const char *data, uint32
 			break;
 		}
 		memset(&aq->client.tmp.device, 0, sizeof(aq->client.tmp.device));
+		aq->client.tmp.device.state = AQ_STATE_UNCHANGED;
 		aq->client.state = AQ_JSTATE_NONE;
 		break;
 	case JSON_OBJECT_END:
