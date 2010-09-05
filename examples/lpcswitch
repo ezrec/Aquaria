@@ -1,2 +1,24 @@
 #!/bin/sh
-echo $0 "$@" 1>&2
+
+# Digital Loggers LPC switch (version 1)
+# --ip=192.168.0.100 --switch=6 --name=Powerhead
+
+usage () {
+	echo "$0 --ip=192.168.0.100 --switch=6 --name=Powerhead --state=on|off"
+}
+
+while [ -n "$1" ]; do
+	case "$1" in
+	--*=*) n=`echo $1 | cut -d- -f3- | cut -d= -f1`
+               v=`echo $1 | cut -d= -f2`
+	       eval "LPC_$n='$v'"
+	       shift
+               ;;
+	*) usage
+	   exit 1;;
+	esac
+done
+
+LPC_state=`echo $LPC_state | tr '[:lower:]' '[:upper:]'`
+
+curl --silent --user admin:1234 "http://${LPC_ip}/outlet?${LPC_switch}=${LPC_state}" >/dev/null
