@@ -278,8 +278,8 @@ void handle_key(char menu_path[PATH_MAX], aq_key key)
 	case AQ_KEY_SELECT:
 		node = menu_mkpath(&top_node, menu_path);
 		if (node->type == NODE_DEVICE) {
-			int is_on = aq_device_get(node->sub.device, NULL);
-			aq_device_set(node->sub.device, !is_on, NULL);
+			enum aq_state is_on = aq_device_get(node->sub.device, NULL);
+			aq_device_set(node->sub.device, (is_on == AQ_STATE_ON) ? AQ_STATE_OFF : AQ_STATE_ON, NULL);
 		}
 		break;
 	case AQ_KEY_CANCEL:
@@ -305,7 +305,7 @@ int ui_mainloop(struct aquaria *aq, void *ui)
 		aq_key key;
 
 		key = ui_keywait(ui, 1000);	/* Wait up to 1 second */
-		aq_sync(aq, NULL);
+		aq_sync(aq, NULL, NULL);
 		if (key > AQ_KEY_NOP) {
 			handle_key(menu_path, key);
 		}

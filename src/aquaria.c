@@ -44,6 +44,9 @@
 #include "uthash.h"
 
 struct aquaria {
+	struct {
+		int noop:1;
+	} flags;
 	struct log *log;
 	struct aq_sensor {
 		void *log_id;
@@ -61,11 +64,7 @@ struct aquaria {
 		char *name;
 		int (*set_state)(void *priv, int is_on);
 		void *priv;
-		enum aq_state {
-			AQ_STATE_UNCHANGED = -1,
-			AQ_STATE_OFF = 0,
-			AQ_STATE_ON = 1,
-		} state;			/* State if condition is true */
+		enum aq_state state;
 		struct {
 			enum aq_state state;
 			time_t expire;
@@ -74,25 +73,16 @@ struct aquaria {
 			int id;
 			struct aq_sensor *sensor;	/* Name of the sensor */
 			enum aq_state state;
-			enum {
-				AQ_COND_INVALID = 0,
-				AQ_COND_LESS,	/* sensor < range */
-				AQ_COND_LEQUAL,	/* sensor <= range */
-				AQ_COND_EQUAL,	/* sensor = [range] */
-				AQ_COND_IN,	/* sensor = (range) */
-				AQ_COND_AT,	/* sensor = [range) */
-				AQ_COND_NEQUAL,	/* sensor != range */
-				AQ_COND_GEQUAL, /* sensor >= range */
-				AQ_COND_GREATER, /* sensor > range */
-			} operator;
+			enum aq_operator operator;
 			struct {
-				uint64_t start;
-				uint64_t len;
+				uint64_t reading;
+				uint64_t span;
 			} range;
 
 			UT_hash_handle hh;
 		} *conditions;
 
+		struct aquaria *aq;
 		UT_hash_handle hh;
 	} *devices;
 	struct aq_line {
@@ -123,14 +113,15 @@ struct aquaria {
 			AQ_JSTATE_NONE = 0,
 			AQ_JSTATE_NAME,
 			AQ_JSTATE_TYPE,
-			AQ_JSTATE_VALUE,
+			AQ_JSTATE_READING,
 			AQ_JSTATE_UNITS,
 			AQ_JSTATE_ACTIVE,
-			AQ_JSTATE_INPUT,
+			AQ_JSTATE_CONDITION,
 			AQ_JSTATE_OPERATOR,
-			AQ_JSTATE_THRESHOLD
+			AQ_JSTATE_EXPIRE,
+			AQ_JSTATE_SPAN
 		} state;
-
+		int done;
 	} client;
 };
 
@@ -210,6 +201,7 @@ static int aquaria_device(struct aquaria *aq, const char *name,
 	}
 
 	dev = calloc(1, sizeof(*dev));
+	dev->aq = aq;
 	dev->name = strdup(name);
 	dev->state = AQ_STATE_UNCHANGED;
 	dev->set_state = set_state;
@@ -223,12 +215,13 @@ static int aquaria_device(struct aquaria *aq, const char *name,
 
 /* Create a new aquaria (for server side)
  */
-struct aquaria *aq_create(const char *log)
+struct aquaria *aq_create(const char *log, int noop)
 {
 	struct aquaria *aq;
 
 	aq = calloc(1, sizeof(*aq));
 	aq->client.sock = -1;
+	aq->flags.noop = noop;
 	aq->log = log_open(log);
 	if (aq->log == NULL) {
 		free(aq);
@@ -241,58 +234,6 @@ struct aquaria *aq_create(const char *log)
 	aquaria_sensor(aq, "Weekday", AQ_SENSOR_WEEKDAY, get_reading_weekday, &reading_time);
 
 	return aq;
-}
-
-static int rd_json_sensor(struct aquaria *aq, int type, const char *data, uint32_t len);
-
-static int rd_json_sensor_reading(struct aquaria *aq, int type, const char *data, uint32_t len)
-{
-	int err = 0;
-
-	switch (type) {
-	case JSON_OBJECT_BEGIN:
-		aq->client.depth++;
-		if (aq->client.depth != 4) {
-			err = -EINVAL;
-			break;
-		}
-		aq->client.state = AQ_JSTATE_NONE;
-		break;
-	case JSON_OBJECT_END:
-		aq->client.depth--;
-		if (aq->client.depth != 3)
-			err = -EINVAL;
-		aq->client.json_handler = rd_json_sensor;
-		aq->client.state = AQ_JSTATE_NONE;
-		break;
-	case JSON_KEY:
-		if (strcmp(data, "value") == 0) {
-			aq->client.state = AQ_JSTATE_VALUE;
-		} else if (strcmp(data, "units") == 0) {
-			aq->client.state = AQ_JSTATE_UNITS;
-		} else {
-			err = -EINVAL;
-		}
-		break;
-	case JSON_STRING:
-		if (aq->client.state == AQ_JSTATE_UNITS) {
-			strncpy(aq->client.units, data, sizeof(aq->client.units));
-		} else {
-			err = -EINVAL;
-		}
-		break;
-	case JSON_INT:
-		if (aq->client.state == AQ_JSTATE_VALUE) {
-			aq->client.tmp.sensor.reading = strtoull(data, NULL, 0);
-		} else {
-			err = -EINVAL;
-		}
-		break;
-	default:
-		err = -EINVAL;
-	}
-
-	return err;
 }
 
 static int rd_json_sensor(struct aquaria *aq, int type, const char *data, uint32_t len)
@@ -347,8 +288,9 @@ static int rd_json_sensor(struct aquaria *aq, int type, const char *data, uint32
 		} else if (strcmp(data, "type") == 0) {
 			aq->client.state = AQ_JSTATE_TYPE;
 		} else if (strcmp(data, "reading") == 0) {
-			aq->client.json_handler = rd_json_sensor_reading;
-			aq->client.state = AQ_JSTATE_NONE;
+			aq->client.state = AQ_JSTATE_READING;
+		} else if (strcmp(data, "units") == 0) {
+			aq->client.state = AQ_JSTATE_UNITS;
 		} else {
 			err = -EINVAL;
 		}
@@ -358,6 +300,8 @@ static int rd_json_sensor(struct aquaria *aq, int type, const char *data, uint32
 			if (aq->client.tmp.sensor.name != NULL)
 				free(aq->client.tmp.sensor.name);
 			aq->client.tmp.sensor.name = strdup(data);
+		} else if (aq->client.state == AQ_JSTATE_UNITS) {
+			/* Ignored for now */
 		} else if (aq->client.state == AQ_JSTATE_TYPE) {
 			enum aq_sensor_type type;
 
@@ -370,8 +314,82 @@ static int rd_json_sensor(struct aquaria *aq, int type, const char *data, uint32
 			err = -EINVAL;
 		}
 		break;
+	case JSON_INT:
+		if (aq->client.state == AQ_JSTATE_READING) {
+			aq->client.tmp.sensor.reading = strtoull(data, NULL, 0);
+		} else {
+			err = -EINVAL;
+		}
+		break;
 	default:
 		err = -EINVAL;
+	}
+
+	return err;
+}
+
+static int rd_json_device(struct aquaria *aq, int type, const char *data, uint32_t len);
+
+static int rd_json_device_override(struct aquaria *aq, int type, const char *data, uint32_t len)
+{
+	int err = 0;
+
+	switch (type) {
+	case JSON_OBJECT_BEGIN:
+		aq->client.depth++;
+		if (aq->client.depth != 4) {
+fprintf(stderr, "ERR: Incorrect override depth %d\n", aq->client.depth);
+			err = -EINVAL;
+			break;
+		}
+		aq->client.tmp.device.override.state = AQ_STATE_UNCHANGED;
+		aq->client.tmp.device.override.expire = 0;
+		break;
+	case JSON_OBJECT_END:
+		aq->client.depth--;
+		aq->client.state = AQ_JSTATE_NONE;
+		aq->client.json_handler = rd_json_device;
+		break;
+	case JSON_KEY:
+		if (aq->client.depth == 4 && strcmp(data, "active") == 0) {
+			aq->client.state = AQ_JSTATE_ACTIVE;
+		} else if (aq->client.depth == 4 && strcmp(data, "units") == 0) {
+			aq->client.state = AQ_JSTATE_UNITS;
+		} else if (aq->client.depth == 4 && strcmp(data, "expire") == 0) {
+			aq->client.state = AQ_JSTATE_EXPIRE;
+		} else {
+fprintf(stderr, "ERR: Key %s at depth %d\n", data, aq->client.depth);
+			err = -EINVAL;
+		}
+		break;
+	case JSON_STRING:
+		if (aq->client.state == AQ_JSTATE_UNITS) {
+			/* TODO */
+		} else {
+fprintf(stderr, "ERR: String %s at depth %d\n", data, aq->client.depth);
+			err = -EINVAL;
+		}
+		break;
+	case JSON_INT:
+		if (aq->client.state == AQ_JSTATE_EXPIRE) {
+			aq->client.tmp.device.override.expire = time(NULL) + strtoull(data, NULL, 0);
+		} else {
+fprintf(stderr, "ERR: Int %s at depth %d\n", data, aq->client.depth);
+			err = -EINVAL;
+		}
+		break;
+	case JSON_TRUE:
+	case JSON_FALSE:
+		if (aq->client.state == AQ_JSTATE_ACTIVE) {
+			aq->client.tmp.device.override.state =
+				(type == JSON_TRUE) ? AQ_STATE_ON : AQ_STATE_OFF;
+		} else {
+			err = -EINVAL;
+		}
+		break;
+	default:
+		err = -EINVAL;
+		break;
 	}
 
 	return err;
@@ -416,9 +434,11 @@ static int rd_json_device(struct aquaria *aq, int type, const char *data, uint32
 			if (dev == NULL) {
 				dev = malloc(sizeof(*dev));
 				*dev = aq->client.tmp.device;
+				dev->aq = aq;
 				HASH_ADD_KEYPTR(hh, aq->devices, dev->name, strlen(dev->name), dev);
 			} else {
 				dev->state = aq->client.tmp.device.state;
+				dev->override = aq->client.tmp.device.override;
 			}
 		} else {
 			err = -EINVAL;
@@ -429,6 +449,9 @@ static int rd_json_device(struct aquaria *aq, int type, const char *data, uint32
 			aq->client.state = AQ_JSTATE_NAME;
 		} else if (strcmp(data, "active") == 0) {
 			aq->client.state = AQ_JSTATE_ACTIVE;
+		} else if (strcmp(data, "override") == 0) {
+			aq->client.state = AQ_JSTATE_NONE;
+			aq->client.json_handler = rd_json_device_override;
 		} else {
 			err = -EINVAL;
 		}
@@ -473,6 +496,8 @@ static int rd_json(void *userdata, int type, const char *data, uint32_t len)
 		break;
 	case JSON_OBJECT_END:
 		aq->client.depth--;
+		if (aq->client.depth == 0)
+			aq->client.done = 1;
 		break;
 	case JSON_KEY:
 		if (strcmp(data, "sensor") == 0) {
@@ -508,24 +533,25 @@ static int wr_json(void *userdata, const char *s, uint32_t len)
 	return 0;
 }
 
-int aq_sync(struct aquaria *aq, const char *request)
+int aq_sync(struct aquaria *aq, const char *request,const struct aq_device *dev)
 {
 	json_printer *print;
 	int err;
+	time_t now;
+
+	if (aq->client.socklen == 0)
+		return 0;
 
 	if (request == NULL) {
-		err = aq_sync(aq,  "get-sensor");
+		err = aq_sync(aq,  "get-sensor", NULL);
 		if (err < 0)
 			return err;
-		err = aq_sync(aq,  "get-device");
+		err = aq_sync(aq,  "get-device", NULL);
 		if (err < 0)
 			return err;
 
 		return 0;
 	}
-
-	if (aq->client.socklen == 0)
-		return 0;
 
 	aq->client.sock = socket(aq->client.sockaddr.sa_family, SOCK_STREAM, 0);
 	if (aq->client.sock < 0)
@@ -560,10 +586,29 @@ int aq_sync(struct aquaria *aq, const char *request)
 	json_print_pretty(print, JSON_OBJECT_BEGIN, NULL, 0);
 	json_print_pretty(print, JSON_KEY, "request", 7);
 	json_print_pretty(print, JSON_STRING, request, 10);
+
+	now = time(NULL);
+	if (dev != NULL) {
+		json_print_pretty(print, JSON_KEY, "name", 4);
+		json_print_pretty(print, JSON_STRING, dev->name, strlen(dev->name));
+
+		if (dev->state != AQ_STATE_UNCHANGED &&
+		    dev->override.expire > now) {
+			char buff[256];
+
+			json_print_pretty(print, JSON_KEY, "active", 6);
+			json_print_pretty(print, (dev->override.state==AQ_STATE_ON) ? JSON_TRUE : JSON_FALSE, NULL, 0);
+			json_print_pretty(print, JSON_KEY, "expire", 6);
+			snprintf(buff, sizeof(buff), "%" PRIu64, (uint64_t)(dev->override.expire - now));
+			buff[sizeof(buff)-1]=0;
+			json_print_pretty(print, JSON_INT, buff, strlen(buff));
+		}
+	}
+
 	json_print_pretty(print, JSON_OBJECT_END, NULL, 0);
 
 	/* Read till we can't read no more */
-	aq->client.depth = 0;
+	aq->client.done = 0;
 	do {
 		char buff;
 
@@ -576,7 +621,7 @@ int aq_sync(struct aquaria *aq, const char *request)
 		err = json_parser_string(&aq->client.parser, &buff, 1, NULL);
 		if (err < 0)
 			return err;
-	} while (aq->client.depth > 0);
+	} while (!aq->client.done);
 
 	close(aq->client.sock);
 	aq->client.sock = -1;
@@ -593,7 +638,7 @@ struct aquaria *aq_connect(const struct sockaddr *sin, socklen_t len)
 	aq->client.sockaddr = *sin;
 	aq->client.socklen = len;
 
-	err = aq_sync(aq, NULL);
+	err = aq_sync(aq, NULL, NULL);
 	if (err < 0) {
 		aq_free(aq);
 		return NULL;
@@ -704,7 +749,9 @@ enum aq_sensor_type aq_sensor_nametype(const char *name)
 {
 	enum aq_sensor_type type = AQ_SENSOR_INVALID;
 
-	if (strcasecmp(name, "temp") == 0) {
+	if (strcasecmp(name, "no-op") == 0) {
+		type = AQ_SENSOR_NOP;
+	} else if (strcasecmp(name, "temp") == 0) {
 		type = AQ_SENSOR_TEMP;
 	} else if (strcasecmp(name, "time") == 0) {
 		type = AQ_SENSOR_TIME;
@@ -746,6 +793,28 @@ static int aq_device_exec(void *priv, int is_on)
 	}
 
 	return -WEXITSTATUS(status);
+}
+
+static int aq_device_debug(void *priv, int is_on)
+{
+	char **argv = priv;
+	char buff[256];
+	int i;
+
+	/* NOTE: argv[0] is already set to the program to run,
+	 *       argv[1] is NULL,
+	 *       argv[N] has the arguments passed in from the config file
+	 */
+	snprintf(buff, sizeof(buff), "--state=%s", is_on ? "on" : "off");
+	argv[1] = buff;
+
+	fprintf(stderr, "EXEC:");
+	for (i = 0; argv[i] != NULL; i++) {
+		fprintf(stderr, " %s", argv[i]);
+	}
+	fprintf(stderr,"\n");
+
+	return 0;
 }
 
 static uint64_t aq_sensor_exec(void *priv)
@@ -931,7 +1000,7 @@ int aq_config_read(struct aquaria *aq, const char *file)
 			/* Read in arguments */
 			argv = read_args(2, argv, &s);
 
-			err = aquaria_device(aq, dev_name, aq_device_exec, argv);
+			err = aquaria_device(aq, dev_name, aq->flags.noop ? aq_device_debug : aq_device_exec, argv);
 			if (err < 0) {
 				syslog(LOG_ERR, "%s:%d: Cannot create device '%s'", file, lineno, argv[0]);
 				exit(EX_DATAERR);
@@ -1013,8 +1082,8 @@ static int aq_cond_nop(struct aq_condition *cond, char **s)
 	}
 
 	cond->operator = AQ_COND_EQUAL;
-	cond->range.start = 0;
-	cond->range.len = 0;
+	cond->range.reading = 0;
+	cond->range.span = 0;
 
 	return 0;
 }
@@ -1126,8 +1195,8 @@ static int aq_cond_value(struct aq_condition *cond, char **s)
 		return -1;
 	}
 
-	cond->range.len = 0;
-	return aq_sensor_unitize(cond->sensor->type, &cond->range.start, tok);
+	cond->range.span = 0;
+	return aq_sensor_unitize(cond->sensor->type, &cond->range.reading, tok);
 }
 
 
@@ -1221,8 +1290,8 @@ static int aq_cond_range(struct aq_condition *cond, char **s)
 		} else {
 			cond->operator = AQ_COND_EQUAL;
 		}
-		cond->range.start = val1;
-		cond->range.len = val2 - val1;
+		cond->range.reading = val1;
+		cond->range.span = val2 - val1;
 	} else if (cond->sensor->type == AQ_SENSOR_TIME) {
 		uint64_t val1, val2;
 		int is_until = 0;
@@ -1240,10 +1309,10 @@ static int aq_cond_range(struct aq_condition *cond, char **s)
 		if (err < 0) {
 			return err;
 		}
-		cond->range.start = val1;
+		cond->range.reading = val1;
 		tok = strtok_r(NULL, " \t", s);
 		if (tok == NULL) {
-			cond->range.len = 1 * 60 * 1000000;	/* 1 minute duration */
+			cond->range.span = 1 * 60 * 1000000;	/* 1 minute duration */
 			return 0;
 		}
 		if (strcasecmp(tok, "until") == 0) {
@@ -1263,12 +1332,12 @@ static int aq_cond_range(struct aq_condition *cond, char **s)
 			if (val2 < val1) {
 				return -1;
 			}
-			cond->range.len = val2 - val1;
+			cond->range.span = val2 - val1;
 		} else {
 			if ((val1 + val2) > (24 * 3600 * 1000000ULL)) {
 				return -1;
 			}
-			cond->range.len = val2;
+			cond->range.span = val2;
 		}
 	} else {
 		return -1;
@@ -1440,31 +1509,31 @@ static enum aq_state aq_eval(struct aq_condition *cond)
 	switch (cond->operator) {
 	case AQ_COND_INVALID: use_state = 0;
 			    break;
-	case AQ_COND_LESS:  use_state = (reading < cond->range.start);
+	case AQ_COND_LESS:  use_state = (reading < cond->range.reading);
 			    break;
 	case AQ_COND_LEQUAL:
-			    use_state = (reading <= cond->range.start);
+			    use_state = (reading <= cond->range.reading);
 			    break;
 	case AQ_COND_EQUAL:
-			    use_state = (reading >= cond->range.start) &&
-			                (reading <= (cond->range.start + cond->range.len));
+			    use_state = (reading >= cond->range.reading) &&
+			                (reading <= (cond->range.reading + cond->range.span));
 			    break;
 	case AQ_COND_IN:
-			    use_state = (reading > cond->range.start) &&
-			                (reading < (cond->range.start + cond->range.len));
+			    use_state = (reading > cond->range.reading) &&
+			                (reading < (cond->range.reading + cond->range.span));
 			    break;
 	case AQ_COND_AT:
-			    use_state = (reading >= cond->range.start) &&
-			                (reading < (cond->range.start + cond->range.len));
+			    use_state = (reading >= cond->range.reading) &&
+			                (reading < (cond->range.reading + cond->range.span));
 			    break;
 	case AQ_COND_NEQUAL:
-			    use_state = (reading < cond->range.start) ||
-			                (reading > (cond->range.start + cond->range.len));
+			    use_state = (reading < cond->range.reading) ||
+			                (reading > (cond->range.reading + cond->range.span));
 	case AQ_COND_GEQUAL:
-			    use_state = (reading >= (cond->range.start + cond->range.len));
+			    use_state = (reading >= (cond->range.reading + cond->range.span));
 			    break;
 	case AQ_COND_GREATER:
-			    use_state = (reading > (cond->range.start + cond->range.len));
+			    use_state = (reading > (cond->range.reading + cond->range.span));
 			    break;
 	}
 
@@ -1555,7 +1624,7 @@ const char *aq_device_name(struct aq_device *dev)
 
 /* Get current desired status (on = 1, off = 0) of a device.
  */
-int aq_device_get(struct aq_device *dev, time_t *override)
+enum aq_state aq_device_get(struct aq_device *dev, time_t *override)
 {
 	if (override != NULL) {
 		*override = dev->override.expire;
@@ -1563,15 +1632,54 @@ int aq_device_get(struct aq_device *dev, time_t *override)
 	return dev->state;
 }
 
-void aq_device_set(struct aq_device *dev, int is_on, time_t *override)
+void aq_device_set(struct aq_device *dev, enum aq_state state, time_t *override)
 {
 	if (override != NULL) {
-		dev->override.expire = *override;
+		dev->override.expire = time(NULL) + *override;
 	} else {
 		/* Default override is 10 minutes */
 		dev->override.expire = time(NULL) + 10 * 60;
 	}
-	dev->override.state = (is_on) ? AQ_STATE_ON : AQ_STATE_OFF;
+	dev->override.state = state;
+
+	aq_sync(dev->aq, "set-device", dev);
+}
+
+/* Get the first device condition
+ */
+struct aq_condition *aq_device_conditions(struct aq_device *dev)
+{
+	return dev->conditions;
+}
+
+/* Get the next device condition
+ */
+struct aq_condition *aq_condition_next(struct aq_condition *cond)
+{
+	return cond->hh.next;
+}
+
+/* Get the condition's desired state
+ */
+enum aq_state aq_condition_state(struct aq_condition *cond)
+{
+	return cond->state;
+}
+
+/* Get the condition's sensor
+ */
+struct aq_sensor *aq_condition_sensor(struct aq_condition *cond)
+{
+	return cond->sensor;
+}
+
+/* Get the condition's trigger
+ */
+void aq_condition_trigger(struct aq_condition *cond, enum aq_operator *op, uint64_t *reading, uint64_t *span)
+{
+	*op = cond->operator;
+	*reading = cond->range.reading;
+	*span = cond->range.span;
 }
 
 /* Get the first sensor

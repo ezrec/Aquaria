@@ -42,14 +42,33 @@ enum aq_sensor_type {
 #endif
 };
 
+enum aq_state {
+	AQ_STATE_UNCHANGED = -1,
+	AQ_STATE_OFF = 0,
+	AQ_STATE_ON = 1,
+};
+
+enum aq_operator {
+	AQ_COND_INVALID = 0,
+	AQ_COND_LESS,	/* sensor < range */
+	AQ_COND_LEQUAL,	/* sensor <= range */
+	AQ_COND_EQUAL,	/* sensor = [range] */
+	AQ_COND_IN,	/* sensor = (range) */
+	AQ_COND_AT,	/* sensor = [range) */
+	AQ_COND_NEQUAL,	/* sensor != range */
+	AQ_COND_GEQUAL, /* sensor >= range */
+	AQ_COND_GREATER, /* sensor > range */
+};
+
 struct aquaria;
 struct aq_device;
 struct aq_sensor;
+struct aq_condition;
 
 /* Instantiation
  */
 struct aquaria *aq_connect(const struct sockaddr *sin, socklen_t len);
-struct aquaria *aq_create(const char *log);
+struct aquaria *aq_create(const char *log, int noop);
 
 void aq_free(struct aquaria *aq);
 
@@ -68,7 +87,7 @@ void aq_sched_eval(struct aquaria *aq);
 /* Refresh sensor and device states (for client connections,
  * unneeded on server)
  */
-int aq_sync(struct aquaria *aq, const char *request);
+int aq_sync(struct aquaria *aq, const char *request, const struct aq_device *dev);
 
 /* Get the first device
  */
@@ -78,7 +97,6 @@ struct aq_device *aq_devices(struct aquaria *aq);
  */
 struct aq_device *aq_device_next(struct aq_device *dev);
 
-
 /* Get a device's name
  */
 const char *aq_device_name(struct aq_device *dev);
@@ -87,10 +105,30 @@ const char *aq_device_name(struct aq_device *dev);
  */
 struct aq_device *aq_device_find(struct aquaria *aq, const char *name);
 
-/* Get current desired status (on = 1, off = 0) of a device.
+/* Get current desired state of a device.
  */
-int aq_device_get(struct aq_device *dev, time_t *override);
-void aq_device_set(struct aq_device *dev, int is_on, time_t *override);
+enum aq_state aq_device_get(struct aq_device *dev, time_t *override);
+void aq_device_set(struct aq_device *dev, enum aq_state, time_t *override);
+
+/* Get the first device condition
+ */
+struct aq_condition *aq_device_conditions(struct aq_device *dev);
+
+/* Get the next device condition
+ */
+struct aq_condition *aq_condition_next(struct aq_condition *cond);
+
+/* Get the condition's desired state
+ */
+enum aq_state aq_condition_state(struct aq_condition *cond);
+
+/* Get the condition's sensor
+ */
+struct aq_sensor *aq_condition_sensor(struct aq_condition *cond);
+
+/* Get the condition's trigger
+ */
+void aq_condition_trigger(struct aq_condition *cond, enum aq_operator *op, uint64_t *reading, uint64_t *span);
 
 /* Get the first sensor
  */

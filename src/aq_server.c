@@ -40,23 +40,19 @@ struct aq_server_conn {
 	json_parser parser;
 	struct {
 		enum {
-			AQ_JKEY_INVALID,
+			AQ_JKEY_INVALID = 0,
 			AQ_JKEY_REQUEST,
 			AQ_JKEY_NAME,
 			AQ_JKEY_TIMEOUT,
-			AQ_JKEY_READING,
-			AQ_JKEY_VALUE,
 			AQ_JKEY_UNITS,
+			AQ_JKEY_EXPIRE,
 			AQ_JKEY_ACTIVE
-		} key, subkey;
+		} key;
 		int  depth;
 		char request[PATH_MAX];
 		char name[PATH_MAX];
-		int active;
-		struct {
-			uint64_t value;
-			char units[PATH_MAX];
-		} timeout,reading, *subobj;
+		enum aq_state state;
+		time_t expire;
 	} json;
 };
 
@@ -101,21 +97,77 @@ static int aq_server_wr_sensor(json_printer *print, struct aq_sensor *sensor)
 
 	/* reading */
 	json_print_pretty(print, JSON_KEY, "reading", 7);
-	json_print_pretty(print, JSON_OBJECT_BEGIN, NULL, 0);
-
-	/* reading.value */
-	json_print_pretty(print, JSON_KEY, "value", 5);
 	snprintf(buff, sizeof(buff), "%" PRIu64, aq_sensor_reading(sensor));
 	buff[sizeof(buff)-1]=0;
 	json_print_pretty(print, JSON_INT, buff, strlen(buff));
 
-	/* reading.units */
+	/* units */
 	json_print_pretty(print, JSON_KEY, "units", 5);
 	cp = aq_sensor_typeunits(type);
 	len = strlen(cp);
 	json_print_pretty(print, JSON_STRING, cp, len);
 
 	json_print_pretty(print, JSON_OBJECT_END, NULL, 0);
+
+	return 0;
+}
+
+static int wr_json_device_condition(json_printer *print, struct aq_condition *cond)
+{
+	const char *name, *cp;
+	char buff[PATH_MAX];
+	enum aq_operator op;
+	uint64_t reading, span;
+	struct aq_sensor *sen;
+	enum aq_state state;
+	enum aq_sensor_type type;
+
+	sen = aq_condition_sensor(cond);
+	type = aq_sensor_type(sen);
+	name = aq_sensor_name(sen);
+
+	state = aq_condition_state(cond);
+	aq_condition_trigger(cond, &op, &reading, &span);
+
+	if (state == AQ_STATE_UNCHANGED)
+		return 0;
+
+	json_print_pretty(print, JSON_OBJECT_BEGIN, NULL, 0);
+
+	json_print_pretty(print, JSON_KEY, "sensor", 6);
+	json_print_pretty(print, JSON_STRING, name, strlen(name));
+
+	json_print_pretty(print, JSON_KEY, "active", 6);
+	json_print_pretty(print, (state == AQ_STATE_ON) ? JSON_TRUE : JSON_FALSE, NULL, 0);
+
+	json_print_pretty(print, JSON_KEY, "operator", 8);
+	switch (op) {
+	case AQ_COND_LESS: cp = "<"; break;
+	case AQ_COND_LEQUAL: cp = "<="; break;
+	case AQ_COND_EQUAL: cp = "="; break;
+	case AQ_COND_IN: cp = "in"; break;
+	case AQ_COND_AT: cp = "at"; break;
+	case AQ_COND_NEQUAL: cp = "!="; break;
+	case AQ_COND_GEQUAL: cp = ">="; break;
+	case AQ_COND_GREATER: cp = ">"; break;
+	default: cp = "invalid"; break;
+	}
+	json_print_pretty(print, JSON_STRING, cp, strlen(cp));
+
+	json_print_pretty(print, JSON_KEY, "reading", 7);
+	snprintf(buff, sizeof(buff), "%" PRIu64, reading);
+	buff[sizeof(buff)-1] = 0;
+	json_print_pretty(print, JSON_INT, buff, strlen(buff));
+
+	json_print_pretty(print, JSON_KEY, "span", 4);
+	snprintf(buff, sizeof(buff), "%" PRIu64, span);
+	buff[sizeof(buff)-1] = 0;
+	json_print_pretty(print, JSON_INT, buff, strlen(buff));
+
+	/* units */
+	json_print_pretty(print, JSON_KEY, "units", 5);
+	cp = aq_sensor_typeunits(type);
+	json_print_pretty(print, JSON_STRING, cp, strlen(cp));
 
 	json_print_pretty(print, JSON_OBJECT_END, NULL, 0);
 
@@ -128,7 +180,8 @@ static int aq_server_wr_device(json_printer *print, struct aq_device *dev)
 	const char *cp;
 	time_t override, now;
 	char buff[PATH_MAX];
-	int active;
+	enum aq_state state;
+	struct aq_condition *cond;
 
 	if (dev == NULL)
 		return 0;
@@ -145,45 +198,47 @@ static int aq_server_wr_device(json_printer *print, struct aq_device *dev)
 	json_print_pretty(print, JSON_STRING, cp, len);
 
 	/* active */
-	active = aq_device_get(dev, &override);
-	if (active >= 0) {
+	state = aq_device_get(dev, &override);
+	if (state != AQ_STATE_UNCHANGED) {
 		json_print_pretty(print, JSON_KEY, "active", 6);
-		json_print_pretty(print, active ? JSON_TRUE : JSON_FALSE, NULL, 0);
+		json_print_pretty(print, (state==AQ_STATE_ON) ? JSON_TRUE : JSON_FALSE, NULL, 0);
 	}
 
 	if (now < override) {
-		/* reason */
-		json_print_pretty(print, JSON_KEY, "reason", 6);
+		/* override */
+		json_print_pretty(print, JSON_KEY, "override", 8);
 		json_print_pretty(print, JSON_OBJECT_BEGIN, NULL, 0);
 
-		/* reason.input */
-		json_print_pretty(print, JSON_KEY, "input", 5);
-		json_print_pretty(print, JSON_STRING, "set", 3);
-
-		/* reason.active */
+		/* override.active */
 		json_print_pretty(print, JSON_KEY, "active", 6);
-		json_print_pretty(print, active ? JSON_TRUE : JSON_FALSE, NULL, 0);
+		json_print_pretty(print, (state==AQ_STATE_ON) ? JSON_TRUE : JSON_FALSE, NULL, 0);
 
-		/* reason.expires */
-		json_print_pretty(print, JSON_KEY, "expires" , 7);
-		json_print_pretty(print, JSON_OBJECT_BEGIN, NULL, 0);
-
-		/* reason.expires.value */
-		json_print_pretty(print, JSON_KEY, "value", 5);
-		snprintf(buff, sizeof(buff), "%" PRIu64, (override - now) * 1000000ULL);
+		/* override.expire */
+		json_print_pretty(print, JSON_KEY, "expire" , 6);
+		snprintf(buff, sizeof(buff), "%" PRIu64, (uint64_t)((override - now) * 1000000ULL));
 		buff[sizeof(buff)-1] = 0;
 		len = strlen(buff);
 		json_print_pretty(print, JSON_INT, buff, len);
 
-		/* reason.expires.units */
+		/* override.units */
 		json_print_pretty(print, JSON_KEY, "units", 5);
-		json_print_pretty(print, JSON_STRING, "us", 2);
+		json_print_pretty(print, JSON_STRING, "s", 1);
 
 		json_print_pretty(print, JSON_OBJECT_END, NULL, 0);
-		/* .. reason.expires */
+		/* .. override */
+	}
 
-		json_print_pretty(print, JSON_OBJECT_END, NULL, 0);
-		/* .. reason */
+	cond = aq_device_conditions(dev);
+	/* Disable printing device condition sets for now */
+	if (0 && cond != NULL) {
+		/* conditions */
+		json_print_pretty(print, JSON_KEY, "condition", 9);
+		json_print_pretty(print, JSON_ARRAY_BEGIN, NULL, 0);
+
+		for (; cond != NULL; cond = aq_condition_next(cond))
+			wr_json_device_condition(print, cond);
+
+		json_print_pretty(print, JSON_ARRAY_END, NULL, 0);
 	}
 
 	json_print_pretty(print, JSON_OBJECT_END, NULL, 0);
@@ -199,6 +254,18 @@ static int aq_server_respond(struct aq_server_conn *conn)
 	err = json_print_init(&print, wr_json, conn);
 	assert(err >= 0);
 
+	if (strcmp(conn->json.request, "set-device") == 0) {
+		struct aq_device *dev;
+		dev = aq_device_find(conn->aq, conn->json.name);
+
+		if (dev == NULL)
+			return -EINVAL;
+
+		aq_device_set(dev, conn->json.state, &conn->json.expire);
+
+		strcpy(conn->json.request, "get-device");
+	}
+
 	if (strcmp(conn->json.request, "get-sensor") == 0) {
 		struct aq_sensor *sensor;
 
@@ -209,8 +276,6 @@ static int aq_server_respond(struct aq_server_conn *conn)
 			for (sensor = aq_sensors(conn->aq);
 			     sensor != NULL;
 			     sensor = aq_sensor_next(sensor)) {
-				if (aq_sensor_type(sensor) == AQ_SENSOR_NOP)
-					continue;
 				aq_server_wr_sensor(&print, sensor);
 			}
 		} else {
@@ -268,21 +333,11 @@ static int rd_json(void *userdata, int type, const char *data, uint32_t len)
 
 	switch (type) {
 	case JSON_OBJECT_BEGIN:
-		if (conn->json.key == AQ_JKEY_TIMEOUT ||
-		    conn->json.key == AQ_JKEY_READING) {
-			if (conn->json.depth != 1) {
-				err=-EINVAL;
-				break;
-			}
-			conn->json.depth = 2;
-			conn->json.subkey = AQ_JKEY_INVALID;
-			break;
-		}
 		if (conn->json.depth > 0) {
 			err=-EINVAL;
 			break;
 		}
-		conn->json.depth = 1;
+		conn->json.depth++;
 		conn->json.key = AQ_JKEY_INVALID;
 		break;
 	case JSON_OBJECT_END:
@@ -302,21 +357,8 @@ static int rd_json(void *userdata, int type, const char *data, uint32_t len)
 				conn->json.key = AQ_JKEY_NAME;
 			} else if (strcmp(data, "active") == 0) {
 				conn->json.key = AQ_JKEY_ACTIVE;
-			} else if (strcmp(data, "timeout") == 0) {
-				conn->json.key = AQ_JKEY_TIMEOUT;
-				conn->json.subobj = &conn->json.timeout;
-			} else if (strcmp(data, "reading") == 0) {
-				conn->json.key = AQ_JKEY_READING;
-				conn->json.subobj = &conn->json.reading;
-			} else {
-				err=-EINVAL;
-				break;
-			}
-		} else if (conn->json.depth == 2) {
-			if (strcmp(data, "value") == 0) {
-				conn->json.subkey = AQ_JKEY_VALUE;
-			} else if (strcmp(data, "units") == 0) {
-				conn->json.subkey = AQ_JKEY_UNITS;
+			} else if (strcmp(data, "expire") == 0) {
+				conn->json.key = AQ_JKEY_EXPIRE;
 			} else {
 				err=-EINVAL;
 				break;
@@ -327,8 +369,8 @@ static int rd_json(void *userdata, int type, const char *data, uint32_t len)
 		}
 		break;
 	case JSON_INT:
-		if (conn->json.depth == 2 && conn->json.subkey == AQ_JKEY_VALUE) {
-			conn->json.subobj->value = strtoull(data, NULL, 0);
+		if (conn->json.depth == 1 && conn->json.key == AQ_JKEY_EXPIRE) {
+			conn->json.expire = (time_t)strtoull(data, NULL, 0);
 		} else {
 			err=-EINVAL;
 			break;
@@ -337,13 +379,13 @@ static int rd_json(void *userdata, int type, const char *data, uint32_t len)
 	case JSON_STRING:
 		cp = NULL;
 		len = 0;
-		if (conn->json.depth == 2 && conn->json.subkey == AQ_JKEY_UNITS) {
-			cp = &conn->json.subobj->units[0];
-			len = sizeof(conn->json.subobj->units);
-		} else if (conn->json.depth != 1) {
+		if (conn->json.depth != 1) {
 			err=-EINVAL;
 			break;
 		} else switch (conn->json.key) {
+			case AQ_JKEY_UNITS:
+				/* Ignore units */
+				break;
 			case AQ_JKEY_REQUEST:
 				cp = &conn->json.request[0];
 				len = sizeof(conn->json.request);
@@ -362,7 +404,7 @@ static int rd_json(void *userdata, int type, const char *data, uint32_t len)
 	case JSON_TRUE:
 	case JSON_FALSE:
 		if (conn->json.depth == 1 && conn->json.key == AQ_JKEY_ACTIVE) {
-			conn->json.active = (type == JSON_TRUE) ? 1 : -1;
+			conn->json.state = (type == JSON_TRUE) ? AQ_STATE_ON : AQ_STATE_OFF;
 		}
 		break;
 	default:

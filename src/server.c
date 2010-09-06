@@ -48,6 +48,7 @@ static void usage(const char *program)
 			"  -d DIR, --datadir DIR       location of Aquaria data\n"
 			"  -v FILE, --vcdlog FILE      VCD log (for use with gtkwave)\n"
 			"  -p PORT, --port NUM         port to listen at\n"
+			"  -n, --noop                  don't change any devices\n"
 			"\n"
 			"Commands:\n"
 			"  -h, -?, --help              this help message\n"
@@ -76,7 +77,7 @@ int main(int argc, char **argv)
 	int fds, i;
 	time_t last_time;
 	int port = 4444;	// Default aquaria port
-	int c, option;
+	int c, option, noop = 0;
 	char *cp;
 	const char *datadir = "/etc/aquaria";
 	const char *vcdlog = "/dev/null";
@@ -86,13 +87,17 @@ int main(int argc, char **argv)
 		{ .name = "help", .has_arg = 0, .flag = NULL, .val = 'h' },
 		{ .name = "version", .has_arg = 0, .flag = NULL, .val = 'V' },
 		{ .name = "port", .has_arg = 1, .flag = NULL, .val = 'p' },
+		{ .name = "noop", .has_arg = 0, .flag = NULL, .val = 'n' },
 		{ .name = NULL },
 	};
 
-	while ((c = getopt_long(argc, argv, "+d:hpvV", options, &option)) >= 0) {
+	while ((c = getopt_long(argc, argv, "+d:hnpvV", options, &option)) >= 0) {
 		switch (c) {
 		case 'd':
 			datadir = optarg;
+			break;
+		case 'n':
+			noop = 1;
 			break;
 		case 'p':
 			port = strtol(optarg, &cp, 0);
@@ -122,7 +127,7 @@ int main(int argc, char **argv)
 	if (err < 0) {
 		exit(EXIT_FAILURE);
 	}
-	aq = aq_create(vcdlog);
+	aq = aq_create(vcdlog, noop);
 	aq_config_read(aq, "config");
 	aq_sched_read(aq, "schedule");
 

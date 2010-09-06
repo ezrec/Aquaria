@@ -21,7 +21,8 @@ Default is port 4444, on localhost
 	{ "sensor": [
 		{ "name":"time",
 		  "type":"time",
-		  "reading": { "value":1249004661212000000, "units":"ns" }
+		  "reading":1249004661212000000,
+		  "units":"ns"
 		}
 	}
 -->
@@ -38,7 +39,9 @@ Default is port 4444, on localhost
 	{ "sensor": [
 		{ "name":"sump.temp"
 		  "type":"temp",
-		  "reading": { "value":28000000, "units":"uK" }
+		  "reading": 28000000,
+		  "units":"uK"
+		}
 	}
 -->
 	{ "request":"get-sensor",
@@ -48,7 +51,8 @@ Default is port 4444, on localhost
 	{ "sensor": [
 		{ "name":"sump.level.overflow",
 		  "type":"switch",
-		  "reading": { "value":0, "units":"switch" }
+		  "reading":0
+		}
 	}
 -->
 	{ "request":"get-device" }
@@ -67,44 +71,82 @@ Default is port 4444, on localhost
 	{ "device": [
 		{ "name":"refugium.pump",
 		  "active":false
-		  "reason":
-			{ "input":"sensor",
-			  "name":"refugium.temp",
+		  "condition": [
+			{ "sensor":"refugium.temp",
+			  "active":true,
 			  "operator":"<",
-			  "threshold": { "value":85, "units":"F" }
+			  "reading":8500000,
+			  "span":1000000,
+			  "units":"uK"
 			}
 		}
 	}
 -->
 	{ "request":"set-device",
 	  "name":"refugium.pump",
-	  "active":true
-	  "timeout": { "value":100, "units":"s" }
+	  "active":true,
+	  "expire":100
 	}
 <--
 	{ "device": [
 		{ "name":"refugium.pump",
 		  "active":true
-		  "reason":
-			{ "input":"set",
+		  "override": {
+			"active":true,
+			"expire":100,
+			"units":"s"
+		  }
+		  "condition": [
+			{ "sensor":"refugium.temp",
 			  "active":true,
-			  "expires": { "value":3273823100, "units":"s" }
+			  "operator":"<",
+			  "reading":8500000,
+			  "span":1000000,
+			  "units":"uK"
 			}
+		  ]
 		}
 	}
 -->
-	{ "request":"unset-device",
+	{ "request":"get-device",
+	  "name":"refugium.pump",
+	}
+<--
+	{ "device": [
+		{ "name":"refugium.pump",
+		  "active":true
+		  "override": {
+			"active":true,
+			"expire":99,
+			"units":"s"
+		  }
+		  "condition": [
+			{ "sensor":"refugium.temp",
+			  "active":true,
+			  "operator":"in",
+			  "reading":8500000,
+			  "span":1000000,
+			  "units":"uK"
+			}
+		  ]
+		}
+	}
+-->
+	{ "request":"set-device",
 	  "name":"refugium.pump",
 	}
 <--
 	{ "device": [
 		{ "name":"refugium.pump",
 		  "active":false,
-		  "reason":
-			{ "input":"sensor",
-			  "name":"refugium.temp",
+		  "condition": [
+			{ "sensor":"refugium.temp",
+			  "active":true,
 			  "operator":"<",
-			  "threshold": { "value":85, "units":"F" }
+			  "reading":8500000,
+			  "span":1000000,
+			  "units":"uK"
 			}
+		  ]
 		}
 	}
