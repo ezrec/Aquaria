@@ -60,8 +60,6 @@ static void ipusbph_flush(void *ui)
 static aq_key ipusbph_keywait(void *ui, unsigned int ms)
 {
 	struct ip_usbph *ph = ui;
-	struct pollfd fds[1];
-	int err;
 	const aq_key keymap[32] = {	/* The empty spots will have 0 - AQ_NOP */
 		[IP_USBPH_KEY_0] = AQ_KEY_0,
 		[IP_USBPH_KEY_1] = AQ_KEY_1,
@@ -82,21 +80,15 @@ static aq_key ipusbph_keywait(void *ui, unsigned int ms)
 		[IP_USBPH_KEY_ASTERISK] = AQ_KEY_PERIOD,
 	};
 
-	fds[0].fd = ip_usbph_key_fd(ph);
-	fds[0].events = POLLIN | POLLERR;
-	fds[0].revents = 0;
+	for (;;) {
+		uint8_t key;
 
-	while ((err = poll(fds, 1, ms)) == 1) {
-		uint16_t key;
-
-		if (fds[0].revents & POLLERR) {
+		key = ip_usbph_key_get(ph, ms);
+		if (key == IP_USBPH_KEY_IDLE)
 			break;
-		}
 
-		key = ip_usbph_key_get(ph);
-		if (key == IP_USBPH_KEY_INVALID) {
+		if (key == IP_USBPH_KEY_ERROR)
 			break;
-		}
 
 		if ((key & IP_USBPH_KEY_PRESSED) != 0) {
 			/* Turn on backlight on keypress */
@@ -158,7 +150,7 @@ static void ipusbph_show_title(void *ui, const char *title)
 	ip_usbph_symbol(ph, IP_USBPH_SYMBOL_MAN, 0);
 	ip_usbph_symbol(ph, IP_USBPH_SYMBOL_UP, 0);
 	ip_usbph_symbol(ph, IP_USBPH_SYMBOL_DOWN, 0);
-	for (i = 0; title[i] != 0; i++) {
+	for (i = 0; title[i] != 0 && i < 8; i++) {
 		ip_usbph_top_char(ph, i, ip_usbph_font_char(title[i]));
 	}
 }
@@ -189,7 +181,7 @@ static void ipusbph_show_sensor(void *ui, const char *title, struct aq_sensor *s
 		break;	/* TODO: Other sensor types */
 	}
 
-	for (i = 0; buff[i] != 0; i++) {
+	for (i = 0; buff[i] != 0 && i < 4; i++) {
 		ip_usbph_bot_char(ph, i, ip_usbph_font_char(buff[i]));
 	}
 	return;
@@ -217,7 +209,7 @@ static void ipusbph_show_device(void *ui, const char *title, struct aq_device *d
 		int i;
 
 		sprintf(buff, "%4d", (int)(override - now));
-		for (i = 0; buff[i] != 0; i++) {
+		for (i = 0; buff[i] != 0 && i < 8; i++) {
 			ip_usbph_bot_char(ph, i, ip_usbph_font_char(buff[i]));
 		}
 
