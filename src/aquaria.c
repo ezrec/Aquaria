@@ -54,7 +54,7 @@ struct aquaria {
 		enum aq_sensor_type type;
 		uint64_t reading;
 
-		uint64_t (*get_reading)(void *priv);
+		int (*get_reading)(void *priv, uint64_t *reading);
 		void *priv;
 
 		UT_hash_handle hh;
@@ -130,35 +130,43 @@ struct aquaria {
  * Time   - Time of day
  * Date   - Microseconds since epoc
  */
-uint64_t get_reading_always(void *priv) { return 0; }
+static int get_reading_always(void *priv, uint64_t *reading)
+{
+	*reading = 0;
+	return 1;
+}
 
 static struct reading_time_s {
 	struct timeval now;
 	struct tm localnow;
 } reading_time;
 
-uint64_t get_reading_time(void *priv)
+static int get_reading_time(void *priv, uint64_t *reading)
 {
 	struct reading_time_s *time = priv;
 
-	return (time->localnow.tm_hour * 3600 +
-		time->localnow.tm_min * 60 +
-		time->localnow.tm_sec) * 1000000ULL +
-	        time->now.tv_usec;
+	*reading = (time->localnow.tm_hour * 3600 +
+		    time->localnow.tm_min * 60 +
+		    time->localnow.tm_sec) * 1000000ULL +
+		    time->now.tv_usec;
+
+	return 1;
 }
 
-uint64_t get_reading_weekday(void *priv)
+static int get_reading_weekday(void *priv, uint64_t *reading)
 {
 	struct reading_time_s *time = priv;
 
-	return time->localnow.tm_wday;
+	*reading = time->localnow.tm_wday;
+
+	return 1;
 }
 
 /* Add sensors to the schedule
  * This must be done before reading the schedule file!
  */
 static int aquaria_sensor(struct aquaria *aq, const char *name,
-                    enum aq_sensor_type type, uint64_t (*get_reading)(void *priv),
+                    enum aq_sensor_type type, int (*get_reading)(void *priv, uint64_t *reading),
                     void *get_reading_priv)
 {
 	struct aq_sensor *sen;
@@ -817,18 +825,28 @@ static int aq_device_debug(void *priv, int is_on)
 	return 0;
 }
 
-static uint64_t aq_sensor_exec(void *priv)
-{
-	char **argv = priv;
-	char buff[256], *cp;
-	char ebuff[256], *ecp;
+struct aq_process {
+	char * const *argv;
 	pid_t pid;
-	int status;
+	struct pollfd pollfd[2];	// 1 = stdout, 2 = stderr
+	char input[256];	// We only want one line of input
+	int input_len;
+	char error[256];	// and only one line of error
+	int error_len;
+};
+
+static int aquaria_exec(struct aq_process *proc)
+{
+	char * const *argv = proc->argv;
+	pid_t pid;
 	int pfd_stdout[2];
 	int pfd_stderr[2];
-	struct pollfd pollfd[2];
-	uint64_t val;
 	int err;
+	struct pollfd *pollfd = &proc->pollfd[0];
+
+	proc->pid = 0;
+	proc->input_len = 0;
+	proc->error_len = 0;
 
 	err = pipe(pfd_stdout);
 	assert(err >= 0);
@@ -839,7 +857,11 @@ static uint64_t aq_sensor_exec(void *priv)
 	 *       argv[N] has the arguments passed in from the config file
 	 */
 	pid = fork();
-	if (pid == 0) { /* child */
+	if (pid < 0) {
+		close(pfd_stdout[1]);
+		close(pfd_stderr[1]);
+		return -1;
+	} else if (pid == 0) { /* child */
 		close(pfd_stdout[0]);
 		dup2(pfd_stdout[1], 1);
 		close(pfd_stderr[0]);
@@ -858,54 +880,106 @@ static uint64_t aq_sensor_exec(void *priv)
 	pollfd[1].events = POLLIN | POLLERR | POLLHUP;
 	pollfd[1].revents = 0;
 
-	cp = &buff[0];
-	ecp = &ebuff[0];
-	while (poll(pollfd, 2, -1) > 0) {
-		if (pollfd[0].revents & POLLIN) {
-			int err;
-			err = read(pollfd[0].fd, cp, sizeof(buff) - (cp - buff));
-			if (err <= 0) {
-				break;
-			}
-			cp += err;
-		}
-		if (pollfd[1].revents & POLLIN) {
-			int err;
-			err = read(pollfd[1].fd, ecp, sizeof(ebuff) - (ecp - buff));
-			if (err <= 0) {
-				break;
-			}
-			ecp += err;
-		}
+	proc->pid = pid;
 
-		if ((pollfd[0].revents & (POLLERR | POLLHUP)) ||
-		    (pollfd[1].revents & (POLLERR | POLLHUP))) {
-			break;
-		}
-	}
-
-	close(pfd_stdout[0]);
-	close(pfd_stderr[0]);
-
-	if (ecp != &ebuff[0]) {
-		*ecp = 0;
-		syslog(LOG_ERR, "%s: %s", argv[0], ebuff);
-	}
-
-	/* parent - wait for child to die */
-	while (waitpid(pid, &status, 0) == 1) {
-		if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
-			return ~0;
-
-		if (WIFSIGNALED(status)) {
-			return ~0;
-		}
-	}
-
-	val = strtoull(buff, NULL, 0);
-	return val;
+	return 0;
 }
 
+/* Returns 0 for ok, 1 for valid input line, < 0 for closed pipe
+ */
+static int aquaria_exec_handler(struct aq_process *proc)
+{
+	char *cp, *ecp;
+	struct pollfd *pollfd = &proc->pollfd[0];
+	int status;
+	int got_input = 0;
+	int got_error = 0;
+	int err = 0;
+	int len;
+
+	cp = &proc->input[proc->input_len];
+	ecp = &proc->error[proc->error_len];
+
+	err = poll(proc->pollfd, 2, 0);
+	if (err == 0)
+		return 0;
+
+	if ((err > 0) && pollfd[0].revents & POLLIN) {
+		len = read(pollfd[0].fd, cp, sizeof(proc->input) - (cp - proc->input));
+		if (len > 0) {
+			cp[len] = 0;
+			if (strchr(cp, '\n') != NULL)
+				got_input = 1;
+			cp += len;
+			proc->input_len += len;
+		} else {
+			err = -errno;
+		}
+	}
+
+	if ((err > 0) && pollfd[1].revents & POLLIN) {
+		len = read(pollfd[1].fd, ecp, sizeof(proc->error) - (ecp - proc->error));
+		if (len > 0) {
+			ecp[len] = 0;
+			if (strchr(ecp, '\n') != NULL)
+				got_error = 1;
+			ecp += len;
+			proc->error_len += len;
+		} else {
+			err = -errno;
+		}
+	}
+
+	if ((err > 0) &&
+	    ((pollfd[0].revents & (POLLERR | POLLHUP)) ||
+	     (pollfd[1].revents & (POLLERR | POLLHUP)))) {
+		err = -EPIPE;
+	}
+
+	if (err > 0)
+		err = 0;
+
+	if (got_error) {
+		*ecp = 0;
+		syslog(LOG_ERR, "%s: %s", proc->argv[0], proc->error);
+		err = 0;
+	}
+
+	if (got_input)
+		err = 1;
+
+	/* wait for child to die */
+	if (err != 0) {
+		close(pollfd[0].fd);
+		close(pollfd[1].fd);
+		kill(proc->pid, SIGTERM);
+		waitpid(proc->pid, &status, 0);
+		proc->pid = 0;
+	}
+
+	return err;
+}
+
+static int aquaria_sensor_exec(void *priv, uint64_t *reading)
+{
+	struct aq_process *proc = priv;
+	int err;
+
+	if (proc->pid <= 0) {
+		err = aquaria_exec(proc);
+		if (err < 0)
+			return err;
+		err = 0;
+	}
+
+	if (proc->pid > 0)
+		err = aquaria_exec_handler(proc);
+
+	if (err == 1)
+		*reading = strtoull(proc->input, NULL, 0);
+
+	return err;
+}
 
 static char **read_args(int argc, char **argv, char **s)
 {
@@ -1010,6 +1084,7 @@ int aq_config_read(struct aquaria *aq, const char *file)
 			 */
 			struct aq_sensor *sen;
 			char **argv;
+			struct aq_process *proc;
 			const char *sen_name;
 			enum aq_sensor_type sen_type;
 
@@ -1046,14 +1121,15 @@ int aq_config_read(struct aquaria *aq, const char *file)
 				exit(EX_DATAERR);
 			}
 
+			proc = calloc(1, sizeof(*proc));
 			argv = malloc(sizeof(char *)*2);
 			argv[0] = strdup(tok);
 			argv[1] = NULL;		/* Tail end */
 
 			/* Read in arguments */
-			argv = read_args(1, argv, &s);
+			proc->argv = read_args(1, argv, &s);
 
-			err = aquaria_sensor(aq, sen_name, sen_type, aq_sensor_exec, argv);
+			err = aquaria_sensor(aq, sen_name, sen_type, aquaria_sensor_exec, proc);
 			if (err < 0) {
 				syslog(LOG_ERR, "%s:%d: Cannot create device '%s'", file, lineno, argv[0]);
 				exit(EX_DATAERR);
@@ -1575,6 +1651,7 @@ void aq_sched_eval(struct aquaria *aq)
 	struct aq_device *dev;
 	struct aq_sensor *sen;
 	enum aq_state state;
+	int ret;
 
 	gettimeofday(&reading_time.now, NULL);
 	localtime_r(&reading_time.now.tv_sec, &reading_time.localnow);
@@ -1583,8 +1660,8 @@ void aq_sched_eval(struct aquaria *aq)
 	 */
 	log_start(aq->log, &reading_time.now);
 	for (sen = aq->sensors; sen != NULL; sen = sen->hh.next) {
-		sen->reading = sen->get_reading(sen->priv);
-		if (sen->log_id != NULL)
+		ret = sen->get_reading(sen->priv, &sen->reading);
+		if (ret == 1 && sen->log_id != NULL)
 			log_sensor(aq->log, sen->log_id, sen->reading);
 	}
 
