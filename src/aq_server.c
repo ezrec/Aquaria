@@ -215,7 +215,7 @@ static int aq_server_wr_device(json_printer *print, struct aq_device *dev)
 
 		/* override.expire */
 		json_print_pretty(print, JSON_KEY, "expire" , 6);
-		snprintf(buff, sizeof(buff), "%" PRIu64, (uint64_t)((override - now) * 1000000ULL));
+		snprintf(buff, sizeof(buff), "%" PRIu64, (uint64_t)(override - now));
 		buff[sizeof(buff)-1] = 0;
 		len = strlen(buff);
 		json_print_pretty(print, JSON_INT, buff, len);
