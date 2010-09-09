@@ -979,8 +979,16 @@ static int aquaria_sensor_exec(void *priv, uint64_t *reading)
 	if (proc->pid > 0)
 		err = aquaria_exec_handler(proc);
 
-	if (err == 1)
-		*reading = strtoull(proc->input, NULL, 0);
+	if (err == 1) {
+		char *cp;
+		uint64_t val;
+
+		val = strtoull(proc->input, &cp, 0);
+		if (cp == proc->input)
+			err = -EIO;
+		else	
+			*reading = val;
+	}
 
 	return err;
 }
