@@ -50,7 +50,7 @@ struct aquaria {
 	struct log *log;
 	struct aq_sensor {
 		void *log_id;
-		char *name;
+		char name[PATH_MAX];
 		enum aq_sensor_type type;
 		uint64_t reading;
 
@@ -61,7 +61,7 @@ struct aquaria {
 	} *sensors;
 	struct aq_device {
 		void *log_id;
-		char *name;
+		char name[PATH_MAX];
 		int (*set_state)(void *priv, int is_on);
 		void *priv;
 		enum aq_state state;
@@ -177,7 +177,8 @@ static int aquaria_sensor(struct aquaria *aq, const char *name,
 	}
 
 	sen = calloc(1, sizeof(*sen));
-	sen->name = strdup(name);
+	strncpy(sen->name, name, sizeof(sen->name));
+	sen->name[sizeof(sen->name)-1] = 0;
 	sen->type = type;
 	sen->get_reading = get_reading;
 	sen->priv = get_reading_priv;
@@ -189,7 +190,7 @@ static int aquaria_sensor(struct aquaria *aq, const char *name,
 		sen->log_id = log_register_sensor(aq->log, name, type);
 	}
 
-	HASH_ADD_KEYPTR(hh, aq->sensors, sen->name, strlen(sen->name), sen);
+	HASH_ADD_STR(aq->sensors, name, sen);
 
 	return 0;
 }
@@ -210,13 +211,14 @@ static int aquaria_device(struct aquaria *aq, const char *name,
 
 	dev = calloc(1, sizeof(*dev));
 	dev->aq = aq;
-	dev->name = strdup(name);
+	strncpy(dev->name, name, sizeof(dev->name));
+	dev->name[sizeof(dev->name)-1] = 0;
 	dev->state = AQ_STATE_UNCHANGED;
 	dev->set_state = set_state;
 	dev->priv = set_state_priv;
 	dev->log_id = log_register_device(aq->log, name);
 
-	HASH_ADD_KEYPTR(hh, aq->devices, dev->name, strlen(dev->name), dev);
+	HASH_ADD_STR(aq->devices, name, dev);
 
 	return 0;
 }
@@ -282,7 +284,7 @@ static int rd_json_sensor(struct aquaria *aq, int type, const char *data, uint32
 			if (sen == NULL) {
 				sen = malloc(sizeof(*sen));
 				*sen = aq->client.tmp.sensor;
-				HASH_ADD_KEYPTR(hh, aq->sensors, sen->name, strlen(sen->name), sen);
+				HASH_ADD_STR(aq->sensors, name, sen);
 			} else if (sen->type == aq->client.tmp.sensor.type) {
 				sen->reading = aq->client.tmp.sensor.reading;
 			} else {
@@ -305,9 +307,8 @@ static int rd_json_sensor(struct aquaria *aq, int type, const char *data, uint32
 		break;
 	case JSON_STRING:
 		if (aq->client.state == AQ_JSTATE_NAME) {
-			if (aq->client.tmp.sensor.name != NULL)
-				free(aq->client.tmp.sensor.name);
-			aq->client.tmp.sensor.name = strdup(data);
+			strncpy(aq->client.tmp.sensor.name, data, sizeof(aq->client.tmp.sensor.name));
+			aq->client.tmp.sensor.name[sizeof(aq->client.tmp.sensor.name)-1] = 0;
 		} else if (aq->client.state == AQ_JSTATE_UNITS) {
 			/* Ignored for now */
 		} else if (aq->client.state == AQ_JSTATE_TYPE) {
@@ -443,7 +444,7 @@ static int rd_json_device(struct aquaria *aq, int type, const char *data, uint32
 				dev = malloc(sizeof(*dev));
 				*dev = aq->client.tmp.device;
 				dev->aq = aq;
-				HASH_ADD_KEYPTR(hh, aq->devices, dev->name, strlen(dev->name), dev);
+				HASH_ADD_STR(aq->devices, name, dev);
 			} else {
 				dev->state = aq->client.tmp.device.state;
 				dev->override = aq->client.tmp.device.override;
@@ -466,9 +467,8 @@ static int rd_json_device(struct aquaria *aq, int type, const char *data, uint32
 		break;
 	case JSON_STRING:
 		if (aq->client.state == AQ_JSTATE_NAME) {
-			if (aq->client.tmp.device.name != NULL)
-				free(aq->client.tmp.device.name);
-			aq->client.tmp.device.name = strdup(data);
+			strncpy(aq->client.tmp.device.name, data, sizeof(aq->client.tmp.device.name));
+			aq->client.tmp.device.name[sizeof(aq->client.tmp.device.name)-1] = 0;
 		} else {
 			err = -EINVAL;
 		}
@@ -615,6 +615,8 @@ int aq_sync(struct aquaria *aq, const char *request,const struct aq_device *dev)
 
 	json_print_pretty(print, JSON_OBJECT_END, NULL, 0);
 
+	json_print_free(&aq->client.print);
+
 	/* Read till we can't read no more */
 	aq->client.done = 0;
 	do {
@@ -630,6 +632,8 @@ int aq_sync(struct aquaria *aq, const char *request,const struct aq_device *dev)
 		if (err < 0)
 			return err;
 	} while (!aq->client.done);
+
+	json_parser_free(&aq->client.parser);
 
 	close(aq->client.sock);
 	aq->client.sock = -1;
@@ -1660,9 +1664,13 @@ void aq_sched_eval(struct aquaria *aq)
 	 */
 	log_start(aq->log, &reading_time.now);
 	for (sen = aq->sensors; sen != NULL; sen = sen->hh.next) {
-		ret = sen->get_reading(sen->priv, &sen->reading);
-		if (ret == 1 && sen->log_id != NULL)
-			log_sensor(aq->log, sen->log_id, sen->reading);
+		uint64_t reading;
+		ret = sen->get_reading(sen->priv, &reading);
+		if (ret == 1) {
+			sen->reading = reading;
+			if (sen->log_id != NULL)
+				log_sensor(aq->log, sen->log_id, sen->reading);
+		}
 	}
 
 	for (dev = aq->devices; dev != NULL; dev = dev->hh.next) {
