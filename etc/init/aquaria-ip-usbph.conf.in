@@ -1,0 +1,10 @@
+# aquaria IP-USBPH interface
+#
+# This service maintains an Aquaria IP-USBPH server from 
+# the point the system is started until it is shut down again.
+
+start on started aquaria
+stop on stopping aquaria
+
+respawn
+exec @bindir@/aquaria-ip-usbph

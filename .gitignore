@@ -33,3 +33,5 @@ Makefile.in
 /src/aquaria-curses
 /src/aquaria-ip-usbph
 /src/aquaria-tty
+/etc/init/aquaria-ip-usbph.conf
+/etc/init/aquaria.conf

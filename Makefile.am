@@ -3,6 +3,22 @@ AM_CFLAGS = -include $(top_builddir)/config.h \
 	    $(IP_USBPH_CFLAGS) $(JSON_CFLAGS) \
 	    -Wall -Werror
 
+initdir=$(sysconfdir)/init
+
+init_DATA = etc/init/aquaria.conf \
+            etc/init/aquaria-ip-usbph.conf
+
+$(init_DATA): Makefile
+	rm -f $@ $@.tmp
+	srcdir=''; \
+	   test -f ./$@.in || srcdir=$(srcdir)/; \
+	   sed -e 's|@bindir[@]|$(bindir)|g' \
+	      $${srcdir}$@.in >$@.tmp
+	mv $@.tmp $@
+
+etc/init/aquaria.conf: etc/init/aquaria.conf.in
+etc/init/aquaria-ip-usbph.conf: etc/init/aquaria-ip-usbph.conf.in
+
 noinst_LIBRARIES = src/libaquaria.a
 
 bin_PROGRAMS = \
