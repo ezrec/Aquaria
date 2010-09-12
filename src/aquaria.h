@@ -18,8 +18,8 @@
  *
  */
 
-#ifndef SCHEDULE_H
-#define SCHEDULE_H
+#ifndef AQUARIA_H
+#define AQUARIA_H
 
 #include <stdint.h>
 #include <time.h>
@@ -35,7 +35,7 @@ enum aq_sensor_type {
 	AQ_SENSOR_WEEKDAY,	/* Reading = 0 = sunday, ... 6 = saturday */
 	AQ_SENSOR_TEMP,		/* Reading = micro degrees kelvin */
 #if 0 /* Unsupported types */
-	AQ_SENSOR_PH,		/* Reading = micro ph */
+	AQ_SENSOR_PH,		/* Reading = micro pH */
 	AQ_SENSOR_FLOW,		/* Reading = micro cubic centimeters/second */
 	AQ_SENSOR_PPB,		/* Reading = parts per billion */
 	AQ_SENSOR_RATIO,	/* Reading = ratio * 1000000 */
@@ -160,4 +160,4 @@ const char *aq_sensor_typename(enum aq_sensor_type type);
 /* Type to units mappings */
 const char *aq_sensor_typeunits(enum aq_sensor_type type);
 
-#endif /* SCHEDULE_H */
+#endif /* AQUARIA_H */
