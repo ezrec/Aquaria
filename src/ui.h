@@ -26,6 +26,7 @@
 
 /* Aquaria UI keys defines */
 typedef enum {
+	AQ_KEY_QUIT = -2,
 	AQ_KEY_ERROR = -1,
 	AQ_KEY_NOP = 0,
 	AQ_KEY_0,		/* Numeric keypad */

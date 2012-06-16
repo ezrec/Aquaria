@@ -92,7 +92,7 @@ static aq_key curses_keywait(void *ui, unsigned int ms)
 	wtimeout(win, ms);
 	ch = wgetch(win);
 	if (ch == ERR) {
-		return AQ_KEY_ERROR;
+		return AQ_KEY_NOP;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(keymap); i++) {

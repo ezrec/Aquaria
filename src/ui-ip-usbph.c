@@ -85,7 +85,7 @@ static aq_key ipusbph_keywait(void *ui, unsigned int ms)
 
 		key = ip_usbph_key_get(ph, ms);
 		if (key == IP_USBPH_KEY_IDLE)
-			break;
+			return AQ_KEY_NOP;
 
 		if (key == IP_USBPH_KEY_ERROR)
 			break;
