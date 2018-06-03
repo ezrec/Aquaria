@@ -65,6 +65,10 @@ struct aq_device;
 struct aq_sensor;
 struct aq_condition;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Instantiation
  */
 struct aquaria *aq_connect(const struct sockaddr *sin, socklen_t len);
@@ -159,5 +163,10 @@ const char *aq_sensor_typename(enum aq_sensor_type type);
 
 /* Type to units mappings */
 const char *aq_sensor_typeunits(enum aq_sensor_type type);
+
+#ifdef __cplusplus
+};
+#endif
+
 
 #endif /* AQUARIA_H */

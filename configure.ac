@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([Aquaria], [0.2], [jason.mcmullan@gmail.com])
+AC_INIT([Aquaria], [0.3], [jason.mcmullan@gmail.com])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CONFIG_HEADERS([config.h])
@@ -29,4 +29,5 @@ AC_CHECK_FUNCS([localtime_r strchr])
 
 AC_OUTPUT([
 	Makefile
+	src/Makefile
 ])
